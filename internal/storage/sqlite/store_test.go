@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -291,6 +293,7 @@ func TestInvalidMigrationSequence(t *testing.T) {
 
 func TestDefaultPathOverride(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("MYINVEST_PORTABLE", "1")
 	t.Setenv("MYINVEST_DATA_DIR", dir)
 	path, err := DefaultPath()
 	if err != nil || path != filepath.Join(dir, "myinvest.sqlite3") {
@@ -299,5 +302,69 @@ func TestDefaultPathOverride(t *testing.T) {
 	t.Setenv("MYINVEST_DATA_DIR", "relative")
 	if _, err := DefaultPath(); err == nil {
 		t.Fatal("relative override accepted")
+	}
+}
+
+func TestPortableDirectory(t *testing.T) {
+	root := t.TempDir()
+	for _, tc := range []struct {
+		name, goos, executable, want string
+	}{
+		{"mac bundle", "darwin", filepath.Join(root, "myInvest.app", "Contents", "MacOS", "myInvest"), root},
+		{"mac binary", "darwin", filepath.Join(root, "myInvest"), root},
+		{"windows binary", "windows", filepath.Join(root, "myInvest.exe"), root},
+		{"linux binary", "linux", filepath.Join(root, "myInvest"), root},
+		{"non bundle", "darwin", filepath.Join(root, "other", "Contents", "MacOS", "myInvest"), filepath.Join(root, "other", "Contents", "MacOS")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := portableDirectory(tc.executable, tc.goos); got != tc.want {
+				t.Fatalf("directory = %q, want %q", got, tc.want)
+			}
+		})
+	}
+	path := filepath.Join(portableDirectory(filepath.Join(root, "myInvest.app", "Contents", "MacOS", "myInvest"), "darwin"), "myinvest.sqlite3")
+	store := openTest(t, path, scripts(t, nil))
+	_ = store.Close()
+	reopened := openTest(t, path, scripts(t, nil))
+	if got := scalar(t, reopened.db, "SELECT count(*) FROM schema_migrations"); got != 1 {
+		t.Fatal("portable database did not survive reopening")
+	}
+}
+
+func TestDefaultPathPortableMode(t *testing.T) {
+	t.Setenv("MYINVEST_DATA_DIR", "")
+	t.Setenv("MYINVEST_PORTABLE", "")
+	normal, err := DefaultPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MYINVEST_PORTABLE", "0")
+	if got, err := DefaultPath(); err != nil || got != normal {
+		t.Fatalf("disabled portable mode: %s %v", got, err)
+	}
+	t.Setenv("MYINVEST_PORTABLE", "1")
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	executable, err = filepath.EvalSymlinks(executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(portableDirectory(executable, runtime.GOOS), "myinvest.sqlite3")
+	if got, err := DefaultPath(); err != nil || got != want {
+		t.Fatalf("portable path: %s %v, want %s", got, err, want)
+	}
+	t.Setenv("MYINVEST_PORTABLE", "yes")
+	if _, err := DefaultPath(); err == nil {
+		t.Fatal("invalid portable setting accepted")
+	}
+}
+
+func TestWindowsDatabaseURI(t *testing.T) {
+	uri := databaseURI("C:/Users/данные #?/myinvest.sqlite3", url.Values{"_pragma": {"foreign_keys(1)"}})
+	parsed, err := url.Parse(uri)
+	if err != nil || parsed.Host != "" || parsed.Path != "/C:/Users/данные #?/myinvest.sqlite3" || parsed.Query().Get("_pragma") != "foreign_keys(1)" {
+		t.Fatalf("invalid Windows URI: %s (%v)", uri, err)
 	}
 }

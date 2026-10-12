@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -24,6 +25,21 @@ func DefaultPath() (string, error) {
 			return "", fmt.Errorf("MYINVEST_DATA_DIR должен быть абсолютным")
 		}
 		return filepath.Join(override, "myinvest.sqlite3"), nil
+	}
+	switch os.Getenv("MYINVEST_PORTABLE") {
+	case "", "0":
+	case "1":
+		executable, err := os.Executable()
+		if err != nil {
+			return "", fmt.Errorf("определить путь приложения: %w", err)
+		}
+		executable, err = filepath.EvalSymlinks(executable)
+		if err != nil {
+			return "", fmt.Errorf("определить фактический путь приложения: %w", err)
+		}
+		return filepath.Join(portableDirectory(executable, runtime.GOOS), "myinvest.sqlite3"), nil
+	default:
+		return "", fmt.Errorf("MYINVEST_PORTABLE должен быть 0 или 1")
 	}
 	var base string
 	var err error
@@ -52,6 +68,18 @@ func DefaultPath() (string, error) {
 		return "", fmt.Errorf("каталог данных должен быть абсолютным: %q", base)
 	}
 	return filepath.Join(base, "myInvest", "myinvest.sqlite3"), nil
+}
+
+func portableDirectory(executable, goos string) string {
+	dir := filepath.Dir(executable)
+	if goos == "darwin" && filepath.Base(dir) == "MacOS" {
+		contents := filepath.Dir(dir)
+		bundle := filepath.Dir(contents)
+		if filepath.Base(contents) == "Contents" && strings.HasSuffix(filepath.Base(bundle), ".app") {
+			return filepath.Dir(bundle)
+		}
+	}
+	return dir
 }
 
 func Open(ctx context.Context, path string, migrations fs.FS) (*Store, error) {
@@ -106,8 +134,16 @@ func connect(path string) (*sql.DB, error) {
 	params.Add("_pragma", "busy_timeout(5000)")
 	params.Add("_pragma", "synchronous(FULL)")
 	// URL encoding also handles spaces, Cyrillic, '?' and '#' in user paths.
-	uri := url.URL{Scheme: "file", Path: filepath.ToSlash(path), RawQuery: params.Encode()}
-	return sql.Open("sqlite", uri.String())
+	return sql.Open("sqlite", databaseURI(filepath.ToSlash(path), params))
+}
+
+// Windows drive letters belong to the URI path, not its authority.
+func databaseURI(path string, params url.Values) string {
+	if len(path) >= 3 && path[1] == ':' && path[2] == '/' {
+		path = "/" + path
+	}
+	uri := url.URL{Scheme: "file", Path: path, RawQuery: params.Encode()}
+	return uri.String()
 }
 
 func (s *Store) Close() error { return s.db.Close() }
