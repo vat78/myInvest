@@ -33,3 +33,6 @@ coverage.out
 
 # Logs
 *.log
+
+# Wails local dependency-install cache
+/frontend/package.json.md5
