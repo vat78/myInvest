@@ -1,0 +1,35 @@
+# macOS and editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Dependencies and build outputs
+node_modules/
+frontend/dist/
+frontend/.svelte-kit/
+/build/bin/
+/dist/
+/tmp/
+*.test
+coverage/
+coverage.out
+*.tsbuildinfo
+
+# Local databases and SQLite sidecars
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+
+# Logs
+*.log
