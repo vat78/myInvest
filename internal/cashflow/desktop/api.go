@@ -20,13 +20,22 @@ type CashFlowDTO struct {
 	ID          string `json:"id"`
 	PortfolioID string `json:"portfolioID"`
 	CashFlowInputDTO
-	Rate string `json:"rate"`
+	Rate         string `json:"rate"`
+	AssetID      string `json:"assetID"`
+	Ticker       string `json:"ticker"`
+	Quantity     string `json:"quantity"`
+	Expenses     string `json:"expenses"`
+	AveragePrice string `json:"averagePrice"`
+	Rounded      bool   `json:"rounded"`
+	MoneyChange  string `json:"moneyChange"`
 }
 type CashSnapshotDTO struct {
-	CurrencyCode string        `json:"currencyCode"`
-	Balance      string        `json:"balance"`
-	Negative     bool          `json:"negative"`
-	Operations   []CashFlowDTO `json:"operations"`
+	CurrencyCode string           `json:"currencyCode"`
+	Balance      string           `json:"balance"`
+	Negative     bool             `json:"negative"`
+	Operations   []CashFlowDTO    `json:"operations"`
+	Warnings     []WarningDTO     `json:"warnings"`
+	CashWarnings []CashWarningDTO `json:"cashWarnings"`
 }
 type CashResultDTO struct {
 	Errors  map[string]string `json:"errors"`
@@ -46,7 +55,7 @@ func validID(id string) bool {
 	return err == nil && v > 0 && strconv.FormatInt(v, 10) == id
 }
 func (a *CashFlowAPI) ListCashFlows(pid string) (CashSnapshotDTO, error) {
-	out := CashSnapshotDTO{Operations: []CashFlowDTO{}}
+	out := CashSnapshotDTO{Operations: []CashFlowDTO{}, Warnings: []WarningDTO{}, CashWarnings: []CashWarningDTO{}}
 	if !validID(pid) {
 		return out, cashflow.ErrPortfolio
 	}
@@ -57,18 +66,28 @@ func (a *CashFlowAPI) ListCashFlows(pid string) (CashSnapshotDTO, error) {
 		}
 		out.CurrencyCode = snapshot.CurrencyCode
 		out.Balance = snapshot.Balance
+		for _, w := range snapshot.CashWarnings {
+			out.CashWarnings = append(out.CashWarnings, CashWarningDTO{w.Date, w.Balance})
+		}
+		for _, w := range snapshot.Warnings {
+			out.Warnings = append(out.Warnings, WarningDTO{w.OperationID, w.Date, w.Ticker, w.Available, w.Quantity})
+		}
 		out.Negative = len(out.Balance) > 0 && out.Balance[0] == '-'
 		for _, o := range snapshot.Operations {
-			rate, err := cashflow.Rate(o.Amount, o.PortfolioAmount)
+			rate := ""
+			var err error
+			if !cashflow.IsTrade(o.Kind) {
+				rate, err = cashflow.Rate(o.Amount, o.PortfolioAmount)
+			}
 			if err != nil {
 				return err
 			}
-			out.Operations = append(out.Operations, CashFlowDTO{o.ID, o.PortfolioID, CashFlowInputDTO{o.Kind, o.Date, o.CurrencyCode, o.Amount, o.PortfolioAmount, o.Comment}, rate})
+			out.Operations = append(out.Operations, CashFlowDTO{ID: o.ID, PortfolioID: o.PortfolioID, CashFlowInputDTO: CashFlowInputDTO{o.Kind, o.Date, o.CurrencyCode, o.Amount, o.PortfolioAmount, o.Comment}, Rate: rate, AssetID: o.AssetID, Ticker: o.Ticker, Quantity: o.Quantity, Expenses: o.Expenses, AveragePrice: o.AveragePrice, Rounded: o.Rounded, MoneyChange: cashflow.MoneyChange(o)})
 		}
 		return nil
 	})
 	if err != nil {
-		return CashSnapshotDTO{}, fmt.Errorf("Не удалось загрузить денежные операции. Повторите попытку")
+		return CashSnapshotDTO{}, fmt.Errorf("Не удалось загрузить операции. Повторите попытку")
 	}
 	return out, nil
 }
@@ -80,7 +99,7 @@ func result(err error) CashResultDTO {
 	} else if errors.Is(err, cashflow.ErrPortfolio) || errors.Is(err, cashflow.ErrNotFound) {
 		out.Message = err.Error()
 	} else if err != nil {
-		out.Message = "Не удалось изменить денежную операцию. Повторите попытку"
+		out.Message = "Не удалось изменить операцию. Повторите попытку"
 	}
 	return out
 }
@@ -117,4 +136,102 @@ func (a *CashFlowAPI) PreviewCashRate(amount, portfolioAmount string) CashRateDT
 		out.Rate, _ = cashflow.Rate(amount, portfolioAmount)
 	}
 	return out
+}
+
+type WarningDTO struct {
+	OperationID string `json:"operationID"`
+	Date        string `json:"date"`
+	Ticker      string `json:"ticker"`
+	Available   string `json:"available"`
+	Quantity    string `json:"quantity"`
+}
+type TradeInputDTO struct {
+	Kind     string `json:"kind"`
+	Date     string `json:"date"`
+	AssetID  string `json:"assetID"`
+	Quantity string `json:"quantity"`
+	Amount   string `json:"amount"`
+	Expenses string `json:"expenses"`
+	Comment  string `json:"comment"`
+}
+type TradePreviewDTO struct {
+	AveragePrice string            `json:"averagePrice"`
+	Rounded      bool              `json:"rounded"`
+	MoneyChange  string            `json:"moneyChange"`
+	Errors       map[string]string `json:"errors"`
+}
+type AssetDTO struct {
+	ID     string `json:"id"`
+	Ticker string `json:"ticker"`
+}
+type AssetResultDTO struct {
+	Asset   AssetDTO          `json:"asset"`
+	Errors  map[string]string `json:"errors"`
+	Message string            `json:"message"`
+}
+
+func (a *CashFlowAPI) ListAssets() ([]AssetDTO, error) {
+	out := []AssetDTO{}
+	err := a.useService(func(s *cashflow.Service) error {
+		assets, err := s.ListAssets(context.Background())
+		if err != nil {
+			return err
+		}
+		for _, v := range assets {
+			out = append(out, AssetDTO{v.ID, v.Ticker})
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("Не удалось загрузить активы. Повторите попытку")
+	}
+	return out, nil
+}
+func (a *CashFlowAPI) AddAsset(ticker string) AssetResultDTO {
+	var asset cashflow.Asset
+	err := a.useService(func(s *cashflow.Service) error {
+		var err error
+		asset, err = s.AddAsset(context.Background(), ticker)
+		return err
+	})
+	r := result(err)
+	if err != nil && len(r.Errors) == 0 {
+		r.Message = "Не удалось добавить актив. Повторите попытку"
+	}
+	return AssetResultDTO{AssetDTO{asset.ID, asset.Ticker}, r.Errors, r.Message}
+}
+func (a *CashFlowAPI) SaveTrade(pid, id string, in TradeInputDTO) CashResultDTO {
+	if !validID(pid) {
+		return result(cashflow.ErrPortfolio)
+	}
+	if id != "" && !validID(id) {
+		return result(cashflow.ErrNotFound)
+	}
+	if !validID(in.AssetID) {
+		return result(&cashflow.FieldError{Field: "assetID", Message: "Выберите актив"})
+	}
+	if !cashflow.IsTrade(in.Kind) {
+		return result(&cashflow.FieldError{Field: "kind", Message: "Выберите покупку или продажу"})
+	}
+	return result(a.useService(func(s *cashflow.Service) error {
+		_, err := s.Save(context.Background(), pid, id, cashflow.Input{Kind: in.Kind, Date: in.Date, AssetID: in.AssetID, Quantity: in.Quantity, Amount: in.Amount, Expenses: in.Expenses, Comment: in.Comment})
+		return err
+	}))
+}
+func (a *CashFlowAPI) PreviewTrade(kind, quantity, amount, expenses string) TradePreviewDTO {
+	out := TradePreviewDTO{Errors: map[string]string{}}
+	in, err := cashflow.ValidateTrade(cashflow.Input{Kind: kind, Date: "2000-01-01", AssetID: "1", Quantity: quantity, Amount: amount, Expenses: expenses})
+	if err != nil {
+		r := result(err)
+		out.Errors = r.Errors
+		return out
+	}
+	out.AveragePrice, out.Rounded, _ = cashflow.AveragePrice(in.Amount, in.Quantity)
+	out.MoneyChange = cashflow.MoneyChange(cashflow.Operation{Input: in})
+	return out
+}
+
+type CashWarningDTO struct {
+	Date    string `json:"date"`
+	Balance string `json:"balance"`
 }

@@ -1,5 +1,53 @@
 export namespace desktop {
 
+	export class AssetDTO {
+	    id: string;
+	    ticker: string;
+
+	    static createFrom(source: any = {}) {
+	        return new AssetDTO(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.ticker = source["ticker"];
+	    }
+	}
+	export class AssetResultDTO {
+	    asset: AssetDTO;
+	    errors: Record<string, string>;
+	    message: string;
+
+	    static createFrom(source: any = {}) {
+	        return new AssetResultDTO(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.asset = this.convertValues(source["asset"], AssetDTO);
+	        this.errors = source["errors"];
+	        this.message = source["message"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class CashFlowDTO {
 	    id: string;
 	    portfolioID: string;
@@ -10,6 +58,13 @@ export namespace desktop {
 	    portfolioAmount: string;
 	    comment: string;
 	    rate: string;
+	    assetID: string;
+	    ticker: string;
+	    quantity: string;
+	    expenses: string;
+	    averagePrice: string;
+	    rounded: boolean;
+	    moneyChange: string;
 
 	    static createFrom(source: any = {}) {
 	        return new CashFlowDTO(source);
@@ -26,6 +81,13 @@ export namespace desktop {
 	        this.portfolioAmount = source["portfolioAmount"];
 	        this.comment = source["comment"];
 	        this.rate = source["rate"];
+	        this.assetID = source["assetID"];
+	        this.ticker = source["ticker"];
+	        this.quantity = source["quantity"];
+	        this.expenses = source["expenses"];
+	        this.averagePrice = source["averagePrice"];
+	        this.rounded = source["rounded"];
+	        this.moneyChange = source["moneyChange"];
 	    }
 	}
 	export class CashFlowInputDTO {
@@ -78,11 +140,47 @@ export namespace desktop {
 	        this.message = source["message"];
 	    }
 	}
+	export class CashWarningDTO {
+	    date: string;
+	    balance: string;
+
+	    static createFrom(source: any = {}) {
+	        return new CashWarningDTO(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.date = source["date"];
+	        this.balance = source["balance"];
+	    }
+	}
+	export class WarningDTO {
+	    operationID: string;
+	    date: string;
+	    ticker: string;
+	    available: string;
+	    quantity: string;
+
+	    static createFrom(source: any = {}) {
+	        return new WarningDTO(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.operationID = source["operationID"];
+	        this.date = source["date"];
+	        this.ticker = source["ticker"];
+	        this.available = source["available"];
+	        this.quantity = source["quantity"];
+	    }
+	}
 	export class CashSnapshotDTO {
 	    currencyCode: string;
 	    balance: string;
 	    negative: boolean;
 	    operations: CashFlowDTO[];
+	    warnings: WarningDTO[];
+	    cashWarnings: CashWarningDTO[];
 
 	    static createFrom(source: any = {}) {
 	        return new CashSnapshotDTO(source);
@@ -94,6 +192,8 @@ export namespace desktop {
 	        this.balance = source["balance"];
 	        this.negative = source["negative"];
 	        this.operations = this.convertValues(source["operations"], CashFlowDTO);
+	        this.warnings = this.convertValues(source["warnings"], WarningDTO);
+	        this.cashWarnings = this.convertValues(source["cashWarnings"], CashWarningDTO);
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -114,6 +214,7 @@ export namespace desktop {
 		    return a;
 		}
 	}
+
 	export class CurrencyPairDTO {
 	    date: string;
 	    base: string;
@@ -231,6 +332,48 @@ export namespace desktop {
 		    }
 		    return a;
 		}
+	}
+	export class TradeInputDTO {
+	    kind: string;
+	    date: string;
+	    assetID: string;
+	    quantity: string;
+	    amount: string;
+	    expenses: string;
+	    comment: string;
+
+	    static createFrom(source: any = {}) {
+	        return new TradeInputDTO(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.date = source["date"];
+	        this.assetID = source["assetID"];
+	        this.quantity = source["quantity"];
+	        this.amount = source["amount"];
+	        this.expenses = source["expenses"];
+	        this.comment = source["comment"];
+	    }
+	}
+	export class TradePreviewDTO {
+	    averagePrice: string;
+	    rounded: boolean;
+	    moneyChange: string;
+	    errors: Record<string, string>;
+
+	    static createFrom(source: any = {}) {
+	        return new TradePreviewDTO(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.averagePrice = source["averagePrice"];
+	        this.rounded = source["rounded"];
+	        this.moneyChange = source["moneyChange"];
+	        this.errors = source["errors"];
+	    }
 	}
 
 }

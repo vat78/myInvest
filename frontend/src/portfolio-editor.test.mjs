@@ -31,7 +31,7 @@ function harness(overrides = {}) {
     nameInput = {focus() {calls.focus.push('name')}};
     addButton = {focus() {calls.focus.push('add')}};
     globalThis.ui = {
-      openList, closeList, toggleMenu, dismissMenu, menuKey,
+      openList, closeList, toggleMenu, dismissMenu, menuKey, openAssets,
       open(p = null) { return openForm(p, addButton); },
       close: closeForm,
       enter(n, d, c) { name = n; openedOn = d; currencyCode = c; },
@@ -126,4 +126,11 @@ test('finishing an earlier list refresh keeps a new save locked', async () => {
   finishSecondSave(ok); await secondSave;
   assert.equal(ui.state.editing, false);
   assert.equal(ui.state.busy, false);
+});
+
+test('asset menu item closes the menu and preserves its return-focus target', async () => {
+  let trigger;
+  const {ui,calls} = harness({$props:()=>({onassets:element=>{trigger=element}})});
+  await ui.toggleMenu();ui.openAssets();assert.equal(ui.state.menu,false);assert.equal(ui.state.opened,false);
+  trigger.focus();assert.equal(calls.focus.at(-1),'menu');
 });

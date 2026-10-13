@@ -3,6 +3,9 @@
   import { formatDecimal } from './decimal-format.mjs';
   import PortfolioManager from './PortfolioManager.svelte';
   import CashFlowManager from './CashFlowManager.svelte';
+  import AssetManager from './AssetManager.svelte';
+  let assetManager: AssetManager;
+  let cashManager: CashFlowManager;
   let portfolioManager: PortfolioManager;
   let portfolioRevision = $state(0);
   import { AddCurrency, GetCurrencyRate, ListCurrencies, SaveCurrencyRate } from '../wailsjs/go/desktop/API';
@@ -126,7 +129,7 @@
   <button class:missing={!todayRate} class="rate" onclick={openEditor} aria-label="Ввести или изменить курс валют">
     {todayRate ? `1 USD = ${formatDecimal(todayRate)} RUB` : '???'}
   </button>
-  <div class="menu-slot"><PortfolioManager bind:this={portfolioManager} onchanged={() => portfolioRevision++} /></div>
+  <div class="menu-slot"><AssetManager bind:this={assetManager} onadded={asset => cashManager.assetAdded(asset)} /><PortfolioManager bind:this={portfolioManager} onchanged={() => portfolioRevision++} onassets={trigger => void assetManager.openList(trigger)} /></div>
 </header>
 <main>
   <span class="eyebrow">Личный учёт инвестиций</span>
@@ -134,7 +137,7 @@
   <p>Ваши инвестиции. Ваши данные.</p>
   {#if mainError}<p class="error" role="alert">{mainError}</p>{/if}
   {#if feedback}<p role="status">{feedback}</p>{/if}
-  <CashFlowManager revision={portfolioRevision} oncreate={() => portfolioManager.openList()} />
+  <CashFlowManager bind:this={cashManager} revision={portfolioRevision} oncreate={() => portfolioManager.openList()} onaddasset={trigger => void assetManager.openList(trigger)} />
 </main>
 
 <dialog bind:this={dialog} oncancel={(event) => { event.preventDefault(); closeEditor(); }}>
