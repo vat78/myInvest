@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"myinvest/internal/cashflow"
+	"myinvest/internal/operations"
 	"strconv"
 )
 
@@ -46,10 +46,10 @@ type CashRateDTO struct {
 	Errors map[string]string `json:"errors"`
 }
 type CashFlowAPI struct {
-	useService func(func(*cashflow.Service) error) error
+	useService func(func(*operations.Service) error) error
 }
 
-func NewAPI(fn func(func(*cashflow.Service) error) error) *CashFlowAPI { return &CashFlowAPI{fn} }
+func NewAPI(fn func(func(*operations.Service) error) error) *CashFlowAPI { return &CashFlowAPI{fn} }
 func validID(id string) bool {
 	v, err := strconv.ParseInt(id, 10, 64)
 	return err == nil && v > 0 && strconv.FormatInt(v, 10) == id
@@ -57,9 +57,9 @@ func validID(id string) bool {
 func (a *CashFlowAPI) ListCashFlows(pid string) (CashSnapshotDTO, error) {
 	out := CashSnapshotDTO{Operations: []CashFlowDTO{}, Warnings: []WarningDTO{}, CashWarnings: []CashWarningDTO{}}
 	if !validID(pid) {
-		return out, cashflow.ErrPortfolio
+		return out, operations.ErrPortfolio
 	}
-	err := a.useService(func(s *cashflow.Service) error {
+	err := a.useService(func(s *operations.Service) error {
 		snapshot, err := s.List(context.Background(), pid)
 		if err != nil {
 			return err
@@ -76,13 +76,13 @@ func (a *CashFlowAPI) ListCashFlows(pid string) (CashSnapshotDTO, error) {
 		for _, o := range snapshot.Operations {
 			rate := ""
 			var err error
-			if !cashflow.IsTrade(o.Kind) {
-				rate, err = cashflow.Rate(o.Amount, o.PortfolioAmount)
+			if !operations.IsTrade(o.Kind) {
+				rate, err = operations.Rate(o.Amount, o.PortfolioAmount)
 			}
 			if err != nil {
 				return err
 			}
-			out.Operations = append(out.Operations, CashFlowDTO{ID: o.ID, PortfolioID: o.PortfolioID, CashFlowInputDTO: CashFlowInputDTO{o.Kind, o.Date, o.CurrencyCode, o.Amount, o.PortfolioAmount, o.Comment}, Rate: rate, AssetID: o.AssetID, Ticker: o.Ticker, Quantity: o.Quantity, Expenses: o.Expenses, AveragePrice: o.AveragePrice, Rounded: o.Rounded, MoneyChange: cashflow.MoneyChange(o)})
+			out.Operations = append(out.Operations, CashFlowDTO{ID: o.ID, PortfolioID: o.PortfolioID, CashFlowInputDTO: CashFlowInputDTO{o.Kind, o.Date, o.CurrencyCode, o.Amount, o.PortfolioAmount, o.Comment}, Rate: rate, AssetID: o.AssetID, Ticker: o.Ticker, Quantity: o.Quantity, Expenses: o.Expenses, AveragePrice: o.AveragePrice, Rounded: o.Rounded, MoneyChange: operations.MoneyChange(o)})
 		}
 		return nil
 	})
@@ -93,10 +93,10 @@ func (a *CashFlowAPI) ListCashFlows(pid string) (CashSnapshotDTO, error) {
 }
 func result(err error) CashResultDTO {
 	out := CashResultDTO{Errors: map[string]string{}}
-	var field *cashflow.FieldError
+	var field *operations.FieldError
 	if errors.As(err, &field) {
 		out.Errors[field.Field] = field.Message
-	} else if errors.Is(err, cashflow.ErrPortfolio) || errors.Is(err, cashflow.ErrNotFound) {
+	} else if errors.Is(err, operations.ErrPortfolio) || errors.Is(err, operations.ErrNotFound) {
 		out.Message = err.Error()
 	} else if err != nil {
 		out.Message = "Не удалось изменить операцию. Повторите попытку"
@@ -105,35 +105,35 @@ func result(err error) CashResultDTO {
 }
 func (a *CashFlowAPI) SaveCashFlow(pid, id string, in CashFlowInputDTO) CashResultDTO {
 	if !validID(pid) {
-		return result(cashflow.ErrPortfolio)
+		return result(operations.ErrPortfolio)
 	}
 	if id != "" && !validID(id) {
-		return result(cashflow.ErrNotFound)
+		return result(operations.ErrNotFound)
 	}
-	return result(a.useService(func(s *cashflow.Service) error {
-		_, err := s.Save(context.Background(), pid, id, cashflow.Input{Kind: in.Kind, Date: in.Date, CurrencyCode: in.CurrencyCode, Amount: in.Amount, PortfolioAmount: in.PortfolioAmount, Comment: in.Comment})
+	return result(a.useService(func(s *operations.Service) error {
+		_, err := s.Save(context.Background(), pid, id, operations.Input{Kind: in.Kind, Date: in.Date, CurrencyCode: in.CurrencyCode, Amount: in.Amount, PortfolioAmount: in.PortfolioAmount, Comment: in.Comment})
 		return err
 	}))
 }
 func (a *CashFlowAPI) DeleteCashFlow(pid, id string) CashResultDTO {
 	if !validID(pid) {
-		return result(cashflow.ErrPortfolio)
+		return result(operations.ErrPortfolio)
 	}
 	if !validID(id) {
-		return result(cashflow.ErrNotFound)
+		return result(operations.ErrNotFound)
 	}
-	return result(a.useService(func(s *cashflow.Service) error { return s.Delete(context.Background(), pid, id) }))
+	return result(a.useService(func(s *operations.Service) error { return s.Delete(context.Background(), pid, id) }))
 }
 func (a *CashFlowAPI) PreviewCashRate(amount, portfolioAmount string) CashRateDTO {
 	out := CashRateDTO{Errors: map[string]string{}}
-	if _, err := cashflow.Amount(amount); err != nil {
+	if _, err := operations.Amount(amount); err != nil {
 		out.Errors["amount"] = err.Error()
 	}
-	if _, err := cashflow.Amount(portfolioAmount); err != nil {
+	if _, err := operations.Amount(portfolioAmount); err != nil {
 		out.Errors["portfolioAmount"] = err.Error()
 	}
 	if len(out.Errors) == 0 {
-		out.Rate, _ = cashflow.Rate(amount, portfolioAmount)
+		out.Rate, _ = operations.Rate(amount, portfolioAmount)
 	}
 	return out
 }
@@ -172,7 +172,7 @@ type AssetResultDTO struct {
 
 func (a *CashFlowAPI) ListAssets() ([]AssetDTO, error) {
 	out := []AssetDTO{}
-	err := a.useService(func(s *cashflow.Service) error {
+	err := a.useService(func(s *operations.Service) error {
 		assets, err := s.ListAssets(context.Background())
 		if err != nil {
 			return err
@@ -188,8 +188,8 @@ func (a *CashFlowAPI) ListAssets() ([]AssetDTO, error) {
 	return out, nil
 }
 func (a *CashFlowAPI) AddAsset(ticker string) AssetResultDTO {
-	var asset cashflow.Asset
-	err := a.useService(func(s *cashflow.Service) error {
+	var asset operations.Asset
+	err := a.useService(func(s *operations.Service) error {
 		var err error
 		asset, err = s.AddAsset(context.Background(), ticker)
 		return err
@@ -202,32 +202,32 @@ func (a *CashFlowAPI) AddAsset(ticker string) AssetResultDTO {
 }
 func (a *CashFlowAPI) SaveTrade(pid, id string, in TradeInputDTO) CashResultDTO {
 	if !validID(pid) {
-		return result(cashflow.ErrPortfolio)
+		return result(operations.ErrPortfolio)
 	}
 	if id != "" && !validID(id) {
-		return result(cashflow.ErrNotFound)
+		return result(operations.ErrNotFound)
 	}
 	if !validID(in.AssetID) {
-		return result(&cashflow.FieldError{Field: "assetID", Message: "Выберите актив"})
+		return result(&operations.FieldError{Field: "assetID", Message: "Выберите актив"})
 	}
-	if !cashflow.IsTrade(in.Kind) {
-		return result(&cashflow.FieldError{Field: "kind", Message: "Выберите покупку или продажу"})
+	if !operations.IsTrade(in.Kind) {
+		return result(&operations.FieldError{Field: "kind", Message: "Выберите покупку или продажу"})
 	}
-	return result(a.useService(func(s *cashflow.Service) error {
-		_, err := s.Save(context.Background(), pid, id, cashflow.Input{Kind: in.Kind, Date: in.Date, AssetID: in.AssetID, Quantity: in.Quantity, Amount: in.Amount, Expenses: in.Expenses, Comment: in.Comment})
+	return result(a.useService(func(s *operations.Service) error {
+		_, err := s.Save(context.Background(), pid, id, operations.Input{Kind: in.Kind, Date: in.Date, AssetID: in.AssetID, Quantity: in.Quantity, Amount: in.Amount, Expenses: in.Expenses, Comment: in.Comment})
 		return err
 	}))
 }
 func (a *CashFlowAPI) PreviewTrade(kind, quantity, amount, expenses string) TradePreviewDTO {
 	out := TradePreviewDTO{Errors: map[string]string{}}
-	in, err := cashflow.ValidateTrade(cashflow.Input{Kind: kind, Date: "2000-01-01", AssetID: "1", Quantity: quantity, Amount: amount, Expenses: expenses})
+	in, err := operations.ValidateTrade(operations.Input{Kind: kind, Date: "2000-01-01", AssetID: "1", Quantity: quantity, Amount: amount, Expenses: expenses})
 	if err != nil {
 		r := result(err)
 		out.Errors = r.Errors
 		return out
 	}
-	out.AveragePrice, out.Rounded, _ = cashflow.AveragePrice(in.Amount, in.Quantity)
-	out.MoneyChange = cashflow.MoneyChange(cashflow.Operation{Input: in})
+	out.AveragePrice, out.Rounded, _ = operations.AveragePrice(in.Amount, in.Quantity)
+	out.MoneyChange = operations.MoneyChange(operations.Operation{Input: in})
 	return out
 }
 

@@ -1,5 +1,5 @@
-// Package cashflow defines the unified portfolio operation history.
-package cashflow
+// Package operations defines the unified portfolio operation history.
+package operations
 
 import (
 	"errors"
