@@ -12,11 +12,13 @@ import (
 type Input struct {
 	Kind, Date, CurrencyCode, Amount, PortfolioAmount, Comment string
 	AssetID, Quantity, Expenses                                string
+	OldUnits, NewUnits                                         string
 }
 type Operation struct {
-	ID, PortfolioID      string
-	Ticker, AveragePrice string
-	Rounded              bool
+	ID, PortfolioID               string
+	Ticker, AveragePrice          string
+	QuantityBefore, QuantityAfter string
+	Rounded                       bool
 	Input
 }
 type FieldError struct{ Field, Message string }
@@ -42,7 +44,7 @@ func rational(value string) *big.Rat {
 	return r
 }
 
-// exact only receives sums of finite decimal inputs. No rounding occurs.
+// exact only receives finite rationals (including validated split results). No rounding occurs.
 func exact(r *big.Rat) string {
 	d := new(big.Int).Set(r.Denom())
 	scale := 0
