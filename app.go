@@ -10,6 +10,9 @@ import (
 	"myinvest/internal/currency"
 	"myinvest/internal/currency/desktop"
 	currencysqlite "myinvest/internal/currency/sqlite"
+	"myinvest/internal/portfolio"
+	portfoliodesktop "myinvest/internal/portfolio/desktop"
+	portfoliosqlite "myinvest/internal/portfolio/sqlite"
 	"myinvest/internal/storage/sqlite"
 	"myinvest/migrations"
 )
@@ -20,6 +23,7 @@ type App struct {
 	store      *sqlite.Store
 	initErr    error
 	currencies *desktop.API
+	portfolios *portfoliodesktop.PortfolioAPI
 }
 
 type AppInfo struct {
@@ -32,6 +36,9 @@ func newApp() *App {
 		return a.withStorage(func(db *sql.DB) error {
 			return fn(currency.NewService(currencysqlite.NewRepository(db)))
 		})
+	})
+	a.portfolios = portfoliodesktop.NewAPI(func(fn func(*portfolio.Service) error) error {
+		return a.withStorage(func(db *sql.DB) error { return fn(portfolio.NewService(portfoliosqlite.NewRepository(db))) })
 	})
 	return a
 }

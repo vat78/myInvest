@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import PortfolioManager from './PortfolioManager.svelte';
   import { AddCurrency, GetCurrencyRate, ListCurrencies, SaveCurrencyRate } from '../wailsjs/go/desktop/API';
   import { localDate } from './calendar';
   const normalize = (code: string) => code.trim().toUpperCase();
@@ -121,6 +122,7 @@
   <button class:missing={!todayRate} class="rate" onclick={openEditor} aria-label="Ввести или изменить курс валют">
     {todayRate ? `1 USD = ${todayRate.replace('.', ',')} RUB` : '???'}
   </button>
+  <div class="menu-slot"><PortfolioManager /></div>
 </header>
 <main>
   <span class="eyebrow">Личный учёт инвестиций</span>
@@ -164,6 +166,7 @@
   button, input { font: inherit; }
   button { cursor: pointer; padding: 10px 16px; border: 1px solid #c4cfd8; border-radius: 8px; background: white; color: inherit; }
   button:disabled { cursor: default; opacity: .6; }
+  .menu-slot { margin-left: auto; }
   .rate { font-weight: 600; overflow-wrap: anywhere; text-align: left; max-width: 100%; }
   .missing, .error { color: #a12e2e; }
   main { max-width: 760px; margin: 0 auto; padding: 80px 32px; }
