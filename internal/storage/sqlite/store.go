@@ -18,6 +18,10 @@ import (
 // Store is ready for use only after all migrations have succeeded.
 type Store struct{ db *sql.DB }
 
+// DB provides the prepared pool to storage adapters. Store owns and closes it;
+// callers must guard repository operations against application shutdown.
+func (s *Store) DB() *sql.DB { return s.db }
+
 // DefaultPath is independent of the working directory and source checkout.
 func DefaultPath() (string, error) {
 	if override := os.Getenv("MYINVEST_DATA_DIR"); override != "" {

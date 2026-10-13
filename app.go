@@ -2,26 +2,55 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"sync"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"myinvest/internal/currency"
+	"myinvest/internal/currency/desktop"
+	currencysqlite "myinvest/internal/currency/sqlite"
 	"myinvest/internal/storage/sqlite"
 	"myinvest/migrations"
 )
 
 type App struct {
-	ready   chan struct{}
-	mu      sync.Mutex
-	store   *sqlite.Store
-	initErr error
+	ready      chan struct{}
+	mu         sync.Mutex
+	store      *sqlite.Store
+	initErr    error
+	currencies *desktop.API
 }
 
 type AppInfo struct {
 	Name string `json:"name"`
 }
 
-func newApp() *App { return &App{ready: make(chan struct{})} }
+func newApp() *App {
+	a := &App{ready: make(chan struct{})}
+	a.currencies = desktop.NewAPI(func(fn func(*currency.Service) error) error {
+		return a.withStorage(func(db *sql.DB) error {
+			return fn(currency.NewService(currencysqlite.NewRepository(db)))
+		})
+	})
+	return a
+}
+
+// Guard bound APIs against incomplete initialization and concurrent shutdown.
+func (a *App) withStorage(fn func(*sql.DB) error) error {
+	if a.ready != nil {
+		<-a.ready
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.initErr != nil {
+		return fmt.Errorf("база данных не готова: %w", a.initErr)
+	}
+	if a.store == nil {
+		return fmt.Errorf("база данных ещё не подготовлена")
+	}
+	return fn(a.store.DB())
+}
 
 func (a *App) initialize(ctx context.Context) error {
 	if a.ready != nil {
