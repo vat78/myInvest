@@ -14,9 +14,13 @@ export function ListCashFlows(arg1:string):Promise<desktop.CashSnapshotDTO>;
 
 export function PreviewCashRate(arg1:string,arg2:string):Promise<desktop.CashRateDTO>;
 
+export function PreviewSplit(arg1:string,arg2:string,arg3:desktop.SplitInputDTO):Promise<desktop.SplitPreviewDTO>;
+
 export function PreviewTrade(arg1:string,arg2:string,arg3:string,arg4:string):Promise<desktop.TradePreviewDTO>;
 
 export function SaveCashFlow(arg1:string,arg2:string,arg3:desktop.CashFlowInputDTO):Promise<desktop.CashResultDTO>;
+
+export function SaveSplit(arg1:string,arg2:string,arg3:desktop.SplitInputDTO):Promise<desktop.CashResultDTO>;
 
 export function SaveTrade(arg1:string,arg2:string,arg3:desktop.TradeInputDTO):Promise<desktop.CashResultDTO>;
 

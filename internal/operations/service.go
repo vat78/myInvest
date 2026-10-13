@@ -42,6 +42,11 @@ func (s *Service) List(ctx context.Context, pid string) (Snapshot, error) {
 		if err != nil {
 			return err
 		}
+		for i := range out.Operations {
+			if q, ok := history.Splits[out.Operations[i].ID]; ok {
+				out.Operations[i].QuantityBefore, out.Operations[i].QuantityAfter = q.Before, q.After
+			}
+		}
 		out.Balance = history.Balance
 		out.Warnings = history.Warnings
 		out.CashWarnings = history.CashWarnings
@@ -62,9 +67,24 @@ func (s *Service) Save(ctx context.Context, pid, id string, in Input) (Operation
 			if err != nil {
 				return err
 			}
-			if IsTrade(old.Kind) != IsTrade(in.Kind) {
+			if (IsTrade(old.Kind) != IsTrade(in.Kind)) || ((old.Kind == "split") != (in.Kind == "split")) {
 				return &FieldError{"kind", "Нельзя изменить вид операции"}
 			}
+		}
+		if in.Kind == "split" {
+			in, err = ValidateSplit(in)
+			if err != nil {
+				return err
+			}
+			exists, err := r.AssetExists(ctx, in.AssetID)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				return &FieldError{"assetID", "Выберите актив из справочника"}
+			}
+			out, err = r.Save(ctx, Operation{ID: id, PortfolioID: pid, Input: in})
+			return err
 		}
 		if IsTrade(in.Kind) {
 			in, err = ValidateTrade(in)

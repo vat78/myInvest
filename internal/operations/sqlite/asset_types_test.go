@@ -75,11 +75,13 @@ func TestAssetTypesPersistenceValidationAndRollback(t *testing.T) {
 
 func TestAssetTypeMigrationPreservesHistory(t *testing.T) {
 	old := legacyFiles(t)
-	data, err := fs.ReadFile(migrations.Files, "0005_unified_operations.sql")
-	if err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"0005_unified_operations.sql", "0006_stock_splits.sql"} {
+		data, err := fs.ReadFile(migrations.Files, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		old[name] = &fstest.MapFile{Data: data}
 	}
-	old["0005_unified_operations.sql"] = &fstest.MapFile{Data: data}
 	path := filepath.Join(t.TempDir(), "legacy.sqlite3")
 	store, err := storage.Open(ctx, path, old)
 	if err != nil {
@@ -90,7 +92,11 @@ func TestAssetTypeMigrationPreservesHistory(t *testing.T) {
  INSERT INTO operations(id,portfolio_id,kind,date,comment) VALUES(7,1,'buy','2026-01-01','legacy');
  INSERT INTO trade_details VALUES(7,42,'2.5','10.01','0.1','4.004');
  INSERT INTO daily_cash_balances VALUES(1,'2026-01-01','-10.11');
- INSERT INTO daily_asset_balances VALUES(1,'2026-01-01',42,'2.5');`)
+ INSERT INTO daily_asset_balances VALUES(1,'2026-01-01',42,'2.5');
+ INSERT INTO operations(id,portfolio_id,kind,date,comment) VALUES(8,1,'split','2026-01-02','legacy split');
+ INSERT INTO split_details VALUES(8,42,'1','2');
+ INSERT INTO daily_cash_balances VALUES(1,'2026-01-02','-10.11');
+ INSERT INTO daily_asset_balances VALUES(1,'2026-01-02',42,'5');`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,8 +115,8 @@ func TestAssetTypeMigrationPreservesHistory(t *testing.T) {
 		t.Fatal("legacy classified")
 	}
 	before, err := s.List(ctx, "1")
-	if err != nil {
-		t.Fatal(err)
+	if err != nil || before.Balance != "-10.11" || len(before.Operations) != 2 || before.Operations[0].ID != "8" || before.Operations[0].Kind != "split" || before.Operations[0].QuantityBefore != "2.5" || before.Operations[0].QuantityAfter != "5" || before.Operations[1].ID != "7" {
+		t.Fatal(before, err)
 	}
 	// Legacy unclassified assets remain tradable.
 	op, err := s.Save(ctx, "1", "", trade("sell", "42", "0.5", "3", "0", "2026-01-02"))
@@ -129,7 +135,7 @@ func TestAssetTypeMigrationPreservesHistory(t *testing.T) {
 		if err != nil || !reflect.DeepEqual(before, after) {
 			t.Fatal(after, err)
 		}
-		if scalarString(t, store.DB(), "SELECT balance FROM daily_cash_balances") != "-10.11" || scalarString(t, store.DB(), "SELECT quantity FROM daily_asset_balances") != "2.5" {
+		if scalarString(t, store.DB(), "SELECT balance FROM daily_cash_balances WHERE date='2026-01-02'") != "-10.11" || scalarString(t, store.DB(), "SELECT quantity FROM daily_asset_balances WHERE date='2026-01-02'") != "5" {
 			t.Fatal("totals changed")
 		}
 	}
@@ -142,25 +148,27 @@ func TestAssetTypeMigrationPreservesHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer backup.Close()
-	if scalarString(t, backup.DB(), "SELECT ticker FROM assets WHERE id=42") != "OLD" {
+	if scalarString(t, backup.DB(), "SELECT ticker FROM assets WHERE id=42") != "OLD" || scalarString(t, backup.DB(), "SELECT max(version) FROM schema_migrations") != "6" || scalarString(t, backup.DB(), "SELECT new_units FROM split_details WHERE operation_id=8") != "2" {
 		t.Fatal("backup")
 	}
 }
 
 func TestAssetTypeMigrationRollback(t *testing.T) {
 	old := legacyFiles(t)
-	data, err := fs.ReadFile(migrations.Files, "0005_unified_operations.sql")
-	if err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"0005_unified_operations.sql", "0006_stock_splits.sql"} {
+		data, err := fs.ReadFile(migrations.Files, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		old[name] = &fstest.MapFile{Data: data}
 	}
-	old["0005_unified_operations.sql"] = &fstest.MapFile{Data: data}
 	path := filepath.Join(t.TempDir(), "legacy.sqlite3")
 	store, err := storage.Open(ctx, path, old)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = store.DB().Exec(`INSERT INTO assets(id,ticker) VALUES(42,'OLD');
- CREATE TRIGGER reject_6 BEFORE INSERT ON schema_migrations WHEN NEW.version=6 BEGIN SELECT RAISE(ABORT,'test'); END;`)
+ CREATE TRIGGER reject_7 BEFORE INSERT ON schema_migrations WHEN NEW.version=7 BEGIN SELECT RAISE(ABORT,'test'); END;`)
 	if err != nil {
 		t.Fatal(err)
 	}

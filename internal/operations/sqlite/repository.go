@@ -13,8 +13,9 @@ type querier interface {
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
 }
 type Repository struct {
-	db *sql.DB
-	q  querier
+	db           *sql.DB
+	q            querier
+	legacySchema bool
 }
 
 func NewRepository(db *sql.DB) *Repository { return &Repository{db: db, q: db} }
@@ -48,25 +49,49 @@ func (r *Repository) CurrencyExists(ctx context.Context, code string) (bool, err
 	return ok, err
 }
 
-const columns = `o.id,o.portfolio_id,o.kind,o.date,o.comment,
+const legacyColumns = `o.id,o.portfolio_id,o.kind,o.date,o.comment,
  coalesce(c.currency_code,''),coalesce(c.amount,t.amount,''),coalesce(c.portfolio_amount,''),
  coalesce(t.asset_id,''),coalesce(t.quantity,''),coalesce(t.expenses,''),coalesce(t.average_price,''),coalesce(a.ticker,''),
  c.operation_id,t.operation_id`
-const joins = ` FROM operations o LEFT JOIN cash_flow_details c ON c.operation_id=o.id
+const legacyJoins = ` FROM operations o LEFT JOIN cash_flow_details c ON c.operation_id=o.id
  LEFT JOIN trade_details t ON t.operation_id=o.id LEFT JOIN assets a ON a.id=t.asset_id `
+
+const columns = `o.id,o.portfolio_id,o.kind,o.date,o.comment,
+ coalesce(c.currency_code,''),coalesce(c.amount,t.amount,''),coalesce(c.portfolio_amount,''),
+ coalesce(t.asset_id,s.asset_id,''),coalesce(t.quantity,''),coalesce(t.expenses,''),coalesce(t.average_price,''),coalesce(a.ticker,''),
+ c.operation_id,t.operation_id,coalesce(s.old_units,''),coalesce(s.new_units,''),s.operation_id`
+const joins = ` FROM operations o LEFT JOIN cash_flow_details c ON c.operation_id=o.id
+ LEFT JOIN trade_details t ON t.operation_id=o.id LEFT JOIN split_details s ON s.operation_id=o.id
+ LEFT JOIN assets a ON a.id=coalesce(t.asset_id,s.asset_id) `
+
+func (r *Repository) selection() string {
+	if r.legacySchema {
+		return legacyColumns + ",'','',NULL" + legacyJoins
+	}
+	return columns + joins
+}
 
 func scan(row interface{ Scan(...any) error }) (operations.Operation, error) {
 	var o operations.Operation
-	var cashID, tradeID sql.NullString
-	err := row.Scan(&o.ID, &o.PortfolioID, &o.Kind, &o.Date, &o.Comment, &o.CurrencyCode, &o.Amount, &o.PortfolioAmount, &o.AssetID, &o.Quantity, &o.Expenses, &o.AveragePrice, &o.Ticker, &cashID, &tradeID)
+	var cashID, tradeID, splitID sql.NullString
+	err := row.Scan(&o.ID, &o.PortfolioID, &o.Kind, &o.Date, &o.Comment, &o.CurrencyCode, &o.Amount, &o.PortfolioAmount, &o.AssetID, &o.Quantity, &o.Expenses, &o.AveragePrice, &o.Ticker, &cashID, &tradeID, &o.OldUnits, &o.NewUnits, &splitID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return o, operations.ErrNotFound
 	}
 	if err != nil {
 		return o, err
 	}
-	if operations.IsTrade(o.Kind) {
-		if !tradeID.Valid || cashID.Valid || o.Ticker == "" {
+	if o.Kind == "split" {
+		if !splitID.Valid || cashID.Valid || tradeID.Valid || o.Ticker == "" {
+			return o, errors.New("incomplete split details")
+		}
+		in, err := operations.ValidateSplit(o.Input)
+		if err != nil {
+			return o, err
+		}
+		o.Input = in
+	} else if operations.IsTrade(o.Kind) {
+		if !tradeID.Valid || cashID.Valid || splitID.Valid || o.Ticker == "" {
 			return o, errors.New("incomplete trade details")
 		}
 		in, err := operations.ValidateTrade(o.Input)
@@ -83,7 +108,7 @@ func scan(row interface{ Scan(...any) error }) (operations.Operation, error) {
 		}
 		o.Rounded = rounded
 	} else {
-		if !cashID.Valid || tradeID.Valid {
+		if !cashID.Valid || tradeID.Valid || splitID.Valid || (o.Kind != "deposit" && o.Kind != "withdrawal") {
 			return o, errors.New("incomplete cash details")
 		}
 		if _, err := operations.Amount(o.Amount); err != nil {
@@ -96,7 +121,7 @@ func scan(row interface{ Scan(...any) error }) (operations.Operation, error) {
 	return o, nil
 }
 func (r *Repository) List(ctx context.Context, pid string) ([]operations.Operation, error) {
-	rows, err := r.q.QueryContext(ctx, "SELECT "+columns+joins+"WHERE o.portfolio_id=? ORDER BY o.date DESC,o.id DESC", pid)
+	rows, err := r.q.QueryContext(ctx, "SELECT "+r.selection()+"WHERE o.portfolio_id=? ORDER BY o.date DESC,CASE WHEN o.kind='split' THEN 0 ELSE 1 END,o.id DESC", pid)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +137,7 @@ func (r *Repository) List(ctx context.Context, pid string) ([]operations.Operati
 	return out, rows.Err()
 }
 func (r *Repository) Find(ctx context.Context, pid, id string) (operations.Operation, error) {
-	return scan(r.q.QueryRowContext(ctx, "SELECT "+columns+joins+"WHERE o.portfolio_id=? AND o.id=?", pid, id))
+	return scan(r.q.QueryRowContext(ctx, "SELECT "+r.selection()+"WHERE o.portfolio_id=? AND o.id=?", pid, id))
 }
 func (r *Repository) Save(ctx context.Context, o operations.Operation) (operations.Operation, error) {
 	var err error
@@ -132,7 +157,10 @@ func (r *Repository) Save(ctx context.Context, o operations.Operation) (operatio
 	if err != nil {
 		return o, err
 	}
-	if operations.IsTrade(o.Kind) {
+	if o.Kind == "split" {
+		_, err = r.q.ExecContext(ctx, `INSERT INTO split_details(operation_id,asset_id,old_units,new_units) VALUES (?,?,?,?)
+ ON CONFLICT(operation_id) DO UPDATE SET asset_id=excluded.asset_id,old_units=excluded.old_units,new_units=excluded.new_units`, o.ID, o.AssetID, o.OldUnits, o.NewUnits)
+	} else if operations.IsTrade(o.Kind) {
 		_, err = r.q.ExecContext(ctx, `INSERT INTO trade_details(operation_id,asset_id,quantity,amount,expenses,average_price) VALUES (?,?,?,?,?,?)
   ON CONFLICT(operation_id) DO UPDATE SET asset_id=excluded.asset_id,quantity=excluded.quantity,amount=excluded.amount,expenses=excluded.expenses,average_price=excluded.average_price`, o.ID, o.AssetID, o.Quantity, o.Amount, o.Expenses, o.AveragePrice)
 	} else {
@@ -222,7 +250,12 @@ func (r *Repository) rebuild(ctx context.Context, pid string) error {
 // RebuildAll is the exact data step of migration 0005. It shares the live writer's
 // calculation and persistence and runs in the same transaction as the SQL.
 func RebuildAll(ctx context.Context, tx *sql.Tx) error {
-	r := &Repository{q: tx}
+	// Migration 0005 executes before split_details exists.
+	var hasSplits bool
+	if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='split_details' AND type='table')").Scan(&hasSplits); err != nil {
+		return err
+	}
+	r := &Repository{q: tx, legacySchema: !hasSplits}
 	rows, err := tx.QueryContext(ctx, "SELECT id FROM portfolios")
 	if err != nil {
 		return err

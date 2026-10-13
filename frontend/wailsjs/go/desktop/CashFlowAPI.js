@@ -26,12 +26,20 @@ export function PreviewCashRate(arg1, arg2) {
   return window['go']['desktop']['CashFlowAPI']['PreviewCashRate'](arg1, arg2);
 }
 
+export function PreviewSplit(arg1, arg2, arg3) {
+  return window['go']['desktop']['CashFlowAPI']['PreviewSplit'](arg1, arg2, arg3);
+}
+
 export function PreviewTrade(arg1, arg2, arg3, arg4) {
   return window['go']['desktop']['CashFlowAPI']['PreviewTrade'](arg1, arg2, arg3, arg4);
 }
 
 export function SaveCashFlow(arg1, arg2, arg3) {
   return window['go']['desktop']['CashFlowAPI']['SaveCashFlow'](arg1, arg2, arg3);
+}
+
+export function SaveSplit(arg1, arg2, arg3) {
+  return window['go']['desktop']['CashFlowAPI']['SaveSplit'](arg1, arg2, arg3);
 }
 
 export function SaveTrade(arg1, arg2, arg3) {
