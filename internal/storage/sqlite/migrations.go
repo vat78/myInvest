@@ -16,6 +16,7 @@ import (
 
 type migration struct {
 	version                int
+	after                  func(context.Context, int, *sql.Tx) error
 	name, script, checksum string
 }
 
@@ -46,7 +47,13 @@ func loadMigrations(files fs.FS) ([]migration, error) {
 		if strings.TrimSpace(string(data)) == "" {
 			return nil, fmt.Errorf("пустая миграция: %s", entry.Name())
 		}
-		result = append(result, migration{version, entry.Name(), string(data), fmt.Sprintf("%x", sha256.Sum256(data))})
+		var after func(context.Context, int, *sql.Tx) error
+		if hook, ok := files.(interface {
+			AfterMigration(context.Context, int, *sql.Tx) error
+		}); ok {
+			after = hook.AfterMigration
+		}
+		result = append(result, migration{version: version, name: entry.Name(), script: string(data), checksum: fmt.Sprintf("%x", sha256.Sum256(data)), after: after})
 	}
 	if len(result) == 0 {
 		return nil, fmt.Errorf("SQL-миграции отсутствуют")
@@ -115,6 +122,11 @@ func apply(ctx context.Context, db *sql.DB, script migration) error {
 	defer tx.Rollback()
 	if _, err := tx.ExecContext(ctx, script.script); err != nil {
 		return err
+	}
+	if script.after != nil {
+		if err := script.after(ctx, script.version, tx); err != nil {
+			return err
+		}
 	}
 	if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, name, checksum, applied_at) VALUES (?, ?, ?, ?)", script.version, script.name, script.checksum, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 		return err

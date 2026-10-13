@@ -1,10 +1,11 @@
-package sqlite
+package sqlite_test
 
 import (
 	"context"
 	"errors"
 	"io/fs"
 	"myinvest/internal/cashflow"
+	. "myinvest/internal/cashflow/sqlite"
 	storage "myinvest/internal/storage/sqlite"
 	"myinvest/migrations"
 	"path/filepath"
@@ -127,13 +128,13 @@ func TestInvalidAndFailedWrites(t *testing.T) {
 	if _, err = s.Save(ctx, "1", "99", input("deposit", "1", "2")); !errors.Is(err, cashflow.ErrNotFound) {
 		t.Fatal(err)
 	}
-	if _, err = store.DB().Exec("CREATE TRIGGER reject_write BEFORE UPDATE ON cash_flows BEGIN SELECT RAISE(ABORT,'private SQL details'); END"); err != nil {
+	if _, err = store.DB().Exec("CREATE TRIGGER reject_write BEFORE UPDATE ON operations BEGIN SELECT RAISE(ABORT,'private SQL details'); END"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.Save(ctx, "1", valid.ID, input("withdrawal", "1", "99")); err == nil {
 		t.Fatal("failed write succeeded")
 	}
-	if _, err = store.DB().Exec("CREATE TRIGGER reject_delete BEFORE DELETE ON cash_flows BEGIN SELECT RAISE(ABORT,'private SQL details'); END"); err != nil {
+	if _, err = store.DB().Exec("CREATE TRIGGER reject_delete BEFORE DELETE ON operations BEGIN SELECT RAISE(ABORT,'private SQL details'); END"); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.Delete(ctx, "1", valid.ID); err == nil {
@@ -161,9 +162,17 @@ func TestInvalidAndFailedWrites(t *testing.T) {
 }
 func TestConstraints(t *testing.T) {
 	store, _, _ := setup(t)
-	for _, args := range [][]any{{99, "deposit", "2026-01-01", "USD", "1", "1"}, {1, "deposit", "2026-01-01", "EUR", "1", "1"}, {1, "trade", "2026-01-01", "USD", "1", "1"}, {1, "deposit", "2026-02-30", "USD", "1", "1"}, {1, "deposit", "2026-01-01", "USD", "0", "1"}, {1, "deposit", "2026-01-01", "USD", "1", "-1"}, {1, "deposit", "2026-01-01", "USD", "1e2", "1"}, {1, "deposit", "2026-01-01", "USD", nil, "1"}} {
-		if _, err := store.DB().Exec("INSERT INTO cash_flows(portfolio_id,kind,date,currency_code,amount,portfolio_amount,comment) VALUES (?,?,?,?,?,?,'')", args...); err == nil {
-			t.Fatal("accepted invalid row", args)
+	for _, args := range [][]any{{99, "deposit", "2026-01-01"}, {1, "trade", "2026-01-01"}, {1, "deposit", "2026-02-30"}, {1, "deposit", "0000-01-01"}} {
+		if _, err := store.DB().Exec("INSERT INTO operations(portfolio_id,kind,date,comment) VALUES (?,?,?,'')", args...); err == nil {
+			t.Fatal("accepted invalid operation", args)
+		}
+	}
+	if _, err := store.DB().Exec("INSERT INTO operations(id,portfolio_id,kind,date,comment) VALUES(1,1,'deposit','2026-01-01','')"); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]any{{"EUR", "1", "1"}, {"USD", "0", "1"}, {"USD", "1", "-1"}, {"USD", "1e2", "1"}, {"USD", nil, "1"}} {
+		if _, err := store.DB().Exec("INSERT INTO cash_flow_details(operation_id,currency_code,amount,portfolio_amount) VALUES(1,?,?,?)", args...); err == nil {
+			t.Fatal("accepted invalid cash details", args)
 		}
 	}
 }
@@ -207,7 +216,7 @@ func TestMigrationUpgradeAndRollback(t *testing.T) {
 			}
 			defer updated.Close()
 			var count int
-			if err = updated.DB().QueryRow("SELECT count(*) FROM sqlite_master WHERE name='cash_flows'").Scan(&count); err != nil {
+			if err = updated.DB().QueryRow("SELECT count(*) FROM sqlite_master WHERE name='operations'").Scan(&count); err != nil {
 				t.Fatal(err)
 			}
 			if (count == 1) == fail {
