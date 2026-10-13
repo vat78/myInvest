@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { formatDecimal } from './decimal-format.mjs';
   import PortfolioManager from './PortfolioManager.svelte';
   import CashFlowManager from './CashFlowManager.svelte';
   let portfolioManager: PortfolioManager;
@@ -35,7 +36,7 @@
     try {
       const result = await GetCurrencyRate({ date: day, base: 'USD', quote: 'RUB' });
       if (!alive || id !== mainRequest || day !== localDate()) return;
-      todayRate = result.found ? result.value : '';
+      todayRate = result.found ? result.displayValue : '';
       mainError = '';
     } catch (reason) {
       if (alive && id === mainRequest) mainError = `Не удалось загрузить курс: ${String(reason)}`;
@@ -123,7 +124,7 @@
 <header>
   <time datetime={today}>{today.split('-').reverse().join('.')}</time>
   <button class:missing={!todayRate} class="rate" onclick={openEditor} aria-label="Ввести или изменить курс валют">
-    {todayRate ? `1 USD = ${todayRate.replace('.', ',')} RUB` : '???'}
+    {todayRate ? `1 USD = ${formatDecimal(todayRate)} RUB` : '???'}
   </button>
   <div class="menu-slot"><PortfolioManager bind:this={portfolioManager} onchanged={() => portfolioRevision++} /></div>
 </header>

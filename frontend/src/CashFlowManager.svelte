@@ -3,6 +3,8 @@
   import { ListPortfolios } from '../wailsjs/go/desktop/PortfolioAPI';
   import { ListCurrencies } from '../wailsjs/go/desktop/API';
   import { ListCashFlows, SaveCashFlow, DeleteCashFlow, PreviewCashRate } from '../wailsjs/go/desktop/CashFlowAPI';
+  import ActionIcon from './ActionIcon.svelte';
+  import { formatDecimal } from './decimal-format.mjs';
   import { localDate } from './calendar';
   let { revision = 0, oncreate }: { revision?: number; oncreate: () => void } = $props();
   type Portfolio = Awaited<ReturnType<typeof ListPortfolios>>[number];
@@ -42,7 +44,7 @@
   let alive = true;
   let portfolio = $derived(portfolios.find(p => p.id === selected));
   let different = $derived(currencyCode !== portfolio?.currencyCode);
-  const display = (s: string) => s.replace('.', ',');
+  const display = formatDecimal;
   const kindLabel = (k: string) => k === 'deposit' ? 'Пополнение' : 'Вывод';
   async function loadPortfolios() {
     const request = ++listRequest;
@@ -174,10 +176,10 @@
           <td><time datetime={op.date}>{op.date.split('-').reverse().join('.')}</time></td><td>{kindLabel(op.kind)}</td>
           <td>{display(op.amount)} {op.currencyCode}</td><td>{display(op.portfolioAmount)} {snapshot.currencyCode}</td>
           <td>≈ {display(op.rate)} {snapshot.currencyCode} за 1 {op.currencyCode}</td><td class="comment">{op.comment}</td>
-          <td><button data-cash-id={op.id} aria-label={`Редактировать ${kindLabel(op.kind)} ${op.date} ${op.amount} ${op.currencyCode}`} onclick={event => void open(op, op.kind, event.currentTarget)}>Редактировать</button><button onclick={event => askDelete(op, event.currentTarget)}>Удалить</button></td>
+          <td><div class="row-actions"><button class="icon-button" title="Редактировать" data-cash-id={op.id} aria-label={`Редактировать ${kindLabel(op.kind)} ${op.date} ${op.amount} ${op.currencyCode}`} onclick={event => void open(op, op.kind, event.currentTarget)}><ActionIcon kind="edit" /></button><button class="icon-button delete-button" title="Удалить" aria-label={`Удалить ${kindLabel(op.kind)} ${op.date} ${op.amount} ${op.currencyCode}`} onclick={event => askDelete(op, event.currentTarget)}><ActionIcon kind="delete" /></button></div></td>
         </tr>{/each}</tbody>
       </table></div>{/if}
-      <p class="hint">Справочный курс округлён до 18 знаков. Остаток рассчитан по точным суммам.</p>
+      <p class="hint">Справочный курс округлён до 4 знаков. Остаток рассчитан по точным суммам.</p>
     {/if}
   {/if}
 </section>
@@ -203,7 +205,7 @@
         <label for="cash-portfolio-amount">Сумма в валюте портфеля ({portfolio?.currencyCode})</label><input id="cash-portfolio-amount" inputmode="decimal" bind:value={portfolioAmount} aria-invalid={!!errors.portfolioAmount} aria-describedby={errors.portfolioAmount ? 'cash-portfolio-amount-error' : undefined} />
       {/if}
       {#if errors.portfolioAmount}<p id="cash-portfolio-amount-error" class="error" role="alert">{errors.portfolioAmount}</p>{/if}
-      {#if different && rate}<p role="status">Справочный курс ≈ {display(rate)} {portfolio?.currencyCode} за 1 {currencyCode} (до 18 знаков)</p>{/if}
+      {#if different && rate}<p role="status">Справочный курс ≈ {display(rate)} {portfolio?.currencyCode} за 1 {currencyCode} (до 4 знаков)</p>{/if}
       {#if rateError}<p class="error" role="alert">{rateError}</p>{/if}
       <label for="cash-comment">Комментарий</label><textarea id="cash-comment" bind:value={comment}></textarea>
     </fieldset>
@@ -240,5 +242,11 @@
   th, td { padding: 10px; border-bottom: 1px solid #dce3e9; vertical-align: top; overflow-wrap: anywhere; }
   th { font-size: 13px; }
   td:first-child, td:nth-child(2) { white-space: nowrap; }
+  .row-actions { display: flex; gap: 8px; }
+  .icon-button { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0; flex: 0 0 40px; }
+  .icon-button:hover { background: #edf3f7; }
+  .delete-button { color: #a12e2e; }
+  .delete-button:hover { background: #fff0f0; }
+  .icon-button:focus-visible { outline: 2px solid #207653; outline-offset: 2px; }
   .comment { white-space: pre-wrap; overflow-wrap: anywhere; }
 </style>

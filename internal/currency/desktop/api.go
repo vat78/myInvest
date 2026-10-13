@@ -19,8 +19,9 @@ type SaveCurrencyRateDTO struct {
 	Value string `json:"value"`
 }
 type CurrencyRateDTO struct {
-	Value string `json:"value"`
-	Found bool   `json:"found"`
+	DisplayValue string `json:"displayValue"`
+	Value        string `json:"value"`
+	Found        bool   `json:"found"`
 }
 
 // The application provides access guarded by its storage lifecycle.
@@ -49,6 +50,9 @@ func (a *API) AddCurrency(code string) (normalized string, err error) {
 func (a *API) GetCurrencyRate(input CurrencyPairDTO) (result CurrencyRateDTO, err error) {
 	err = a.useService(func(s *currency.Service) error {
 		result.Value, result.Found, err = s.Find(context.Background(), input.Date, input.Base, input.Quote)
+		if err == nil && result.Found {
+			result.DisplayValue, err = currency.DisplayRate(result.Value)
+		}
 		return err
 	})
 	return

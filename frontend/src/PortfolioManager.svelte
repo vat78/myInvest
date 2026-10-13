@@ -2,6 +2,7 @@
   import { tick, onDestroy } from 'svelte';
   import { ListCurrencies } from '../wailsjs/go/desktop/API';
   import { ListPortfolios, CreatePortfolio, UpdatePortfolio } from '../wailsjs/go/desktop/PortfolioAPI';
+  import ActionIcon from './ActionIcon.svelte';
   import { localDate } from './calendar';
   let { onchanged = () => {} }: { onchanged?: () => void } = $props();
   type Portfolio = { id: string; name: string; openedOn: string; currencyCode: string };
@@ -143,7 +144,7 @@
       <thead><tr><th>Название</th><th>Дата открытия</th><th>Валюта</th><th>Действия</th></tr></thead>
       <tbody>{#each portfolios as p (p.id)}
         <tr><td>{p.name}</td><td><time datetime={p.openedOn}>{p.openedOn.split('-').reverse().join('.')}</time></td><td>{p.currencyCode}</td>
-          <td><button data-portfolio-id={p.id} aria-label={`Редактировать портфель ${p.name}`} onclick={(event) => void openForm(p, event.currentTarget)}>Редактировать</button></td></tr>
+          <td><button class="icon-button" title="Редактировать" data-portfolio-id={p.id} aria-label={`Редактировать портфель ${p.name}`} onclick={(event) => void openForm(p, event.currentTarget)}><ActionIcon kind="edit" /></button></td></tr>
       {/each}</tbody>
     </table></div>
   {/if}
@@ -200,6 +201,9 @@
   input[readonly] { background: #f5f7fa; }
   [aria-invalid="true"] { border-color: #a12e2e; }
   .actions { display: flex; justify-content: flex-end; gap: 12px; }
+  .icon-button { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0; }
+  .icon-button:hover { background: #edf3f7; }
+  .icon-button:focus-visible { outline: 2px solid #207653; outline-offset: 2px; }
   .primary { background: #207653; color: white; border-color: #207653; }
   .error { color: #a12e2e; overflow-wrap: anywhere; font-size: 14px; }
   .table-scroll { overflow-x: auto; margin-top: 20px; }

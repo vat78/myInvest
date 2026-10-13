@@ -131,6 +131,7 @@ export namespace desktop {
 	    }
 	}
 	export class CurrencyRateDTO {
+	    displayValue: string;
 	    value: string;
 	    found: boolean;
 
@@ -140,6 +141,7 @@ export namespace desktop {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.displayValue = source["displayValue"];
 	        this.value = source["value"];
 	        this.found = source["found"];
 	    }

@@ -63,7 +63,7 @@ func TestBridge(t *testing.T) {
 		t.Fatal(got)
 	}
 	p := api.PreviewCashRate("3", "1")
-	if p.Rate != "0.333333333333333333" || len(p.Errors) > 0 {
+	if p.Rate != "0.3333" || len(p.Errors) > 0 {
 		t.Fatal(p)
 	}
 	p = api.PreviewCashRate("0", "oops")

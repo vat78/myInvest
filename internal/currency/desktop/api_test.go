@@ -44,7 +44,7 @@ func TestCurrencyBridge(t *testing.T) {
 	if err := app.SaveCurrencyRate(SaveCurrencyRateDTO{Date: pair.Date, Base: "usd", Quote: " rub ", Value: value}); err != nil {
 		t.Fatal(err)
 	}
-	if rate, err := app.GetCurrencyRate(pair); err != nil || !rate.Found || rate.Value != "95.123456789012345678901234567890000" {
+	if rate, err := app.GetCurrencyRate(pair); err != nil || !rate.Found || rate.Value != "95.123456789012345678901234567890000" || rate.DisplayValue != "95.1235" {
 		t.Fatalf("exact DTO: %+v %v", rate, err)
 	}
 	if err := app.SaveCurrencyRate(SaveCurrencyRateDTO{Date: pair.Date, Base: "USD", Quote: "RUB", Value: "0"}); err == nil {

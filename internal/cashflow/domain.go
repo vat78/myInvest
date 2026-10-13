@@ -70,13 +70,13 @@ func Rate(amount, portfolioAmount string) (string, error) {
 		return "", err
 	}
 	r := new(big.Rat).Quo(rational(b), rational(a))
-	n := new(big.Int).Mul(r.Num(), new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil))
+	n := new(big.Int).Mul(r.Num(), new(big.Int).Exp(big.NewInt(10), big.NewInt(4), nil))
 	q, rem := new(big.Int), new(big.Int)
 	q.QuoRem(n, r.Denom(), rem)
 	if rem.Lsh(rem, 1).Cmp(r.Denom()) >= 0 {
 		q.Add(q, big.NewInt(1))
 	}
-	return exact(new(big.Rat).SetFrac(q, new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil))), nil
+	return exact(new(big.Rat).SetFrac(q, new(big.Int).Exp(big.NewInt(10), big.NewInt(4), nil))), nil
 }
 func Validate(in Input, portfolioCurrency string) (Input, error) {
 	if in.Kind != "deposit" && in.Kind != "withdrawal" {

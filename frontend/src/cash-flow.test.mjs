@@ -1,3 +1,4 @@
+import { formatDecimal } from './decimal-format.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -15,6 +16,7 @@ function harness(overrides = {}) {
   const script = source.slice(instance.content.start, instance.content.end).replace(/^\s*import .*;$/gm, '');
   const effects = [], writes = [], removals = [], focus = [];
   const sandbox = {
+    formatDecimal,
     $props: () => ({ oncreate() {} }), $state: value => value,
     $derived: value => value, $effect: fn => effects.push(fn),
     tick: async () => {}, onDestroy() {}, localDate: () => '2026-10-13', setTimeout, clearTimeout,
