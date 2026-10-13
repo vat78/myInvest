@@ -100,3 +100,17 @@ func NewPair(date, base, quote string) (Pair, error) {
 	}
 	return Pair{Date: date, Base: b, Quote: q}, nil
 }
+
+// DisplayRate rounds a reference rate to four decimal places, half up.
+// The stored value remains exact and is used when editing.
+func DisplayRate(input string) (string, error) {
+	value, err := Decimal(input)
+	if err != nil {
+		return "", err
+	}
+	rate, ok := new(big.Rat).SetString(value)
+	if !ok {
+		return "", fmt.Errorf("не удалось прочитать точный курс")
+	}
+	return strings.TrimRight(strings.TrimRight(rate.FloatString(4), "0"), "."), nil
+}

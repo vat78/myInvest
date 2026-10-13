@@ -67,3 +67,17 @@ func TestInverse(t *testing.T) {
 		})
 	}
 }
+
+func TestDisplayRate(t *testing.T) {
+	for _, tc := range []struct{ input, want string }{
+		{"95.1234567890123456789", "95.1235"}, {"1.23445", "1.2345"},
+		{"1.234449999999999999999", "1.2344"}, {"9.99995", "10"},
+		{"0.00005", "0.0001"}, {"0.00004999999999999999", "0"},
+		{"1000", "1000"}, {"1.2", "1.2"},
+	} {
+		got, err := DisplayRate(tc.input)
+		if err != nil || got != tc.want {
+			t.Errorf("%s: got %s err %v want %s", tc.input, got, err, tc.want)
+		}
+	}
+}

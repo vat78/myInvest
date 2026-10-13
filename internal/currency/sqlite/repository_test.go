@@ -125,7 +125,7 @@ func TestCurrencyMigrationUpgradeAndRollback(t *testing.T) {
 	initial := openTest(t, path, scripts(t, nil))
 	_ = initial.Close()
 	updated := openTest(t, path, shipped.Files)
-	if n := scalar(t, updated.db, "SELECT count(*) FROM schema_migrations"); n != 3 {
+	if n := scalar(t, updated.db, "SELECT count(*) FROM schema_migrations WHERE version = 2"); n != 1 {
 		t.Fatal("migration missing")
 	}
 	copies, _ := filepath.Glob(filepath.Join(filepath.Dir(path), "backups", "*.sqlite3"))

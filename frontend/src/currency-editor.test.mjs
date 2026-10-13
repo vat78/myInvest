@@ -1,3 +1,4 @@
+import { formatDecimal } from './decimal-format.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -13,6 +14,7 @@ function editorHarness(addCurrency = async code => code) {
     .replace(/^\s*import .*;$/gm, '');
   const saved = [];
   const sandbox = {
+    formatDecimal,
     $state: value => value,
     $derived: value => value,
     onMount: () => {},
