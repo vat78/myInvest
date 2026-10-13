@@ -161,8 +161,9 @@ type TradePreviewDTO struct {
 	Errors       map[string]string `json:"errors"`
 }
 type AssetDTO struct {
-	ID     string `json:"id"`
-	Ticker string `json:"ticker"`
+	ID       string `json:"id"`
+	Ticker   string `json:"ticker"`
+	TypeCode string `json:"typeCode"`
 }
 type AssetResultDTO struct {
 	Asset   AssetDTO          `json:"asset"`
@@ -178,7 +179,7 @@ func (a *CashFlowAPI) ListAssets() ([]AssetDTO, error) {
 			return err
 		}
 		for _, v := range assets {
-			out = append(out, AssetDTO{v.ID, v.Ticker})
+			out = append(out, AssetDTO{v.ID, v.Ticker, v.TypeCode})
 		}
 		return nil
 	})
@@ -187,18 +188,18 @@ func (a *CashFlowAPI) ListAssets() ([]AssetDTO, error) {
 	}
 	return out, nil
 }
-func (a *CashFlowAPI) AddAsset(ticker string) AssetResultDTO {
+func (a *CashFlowAPI) AddAsset(in AssetInputDTO) AssetResultDTO {
 	var asset operations.Asset
 	err := a.useService(func(s *operations.Service) error {
 		var err error
-		asset, err = s.AddAsset(context.Background(), ticker)
+		asset, err = s.AddAsset(context.Background(), in.Ticker, in.TypeCode)
 		return err
 	})
 	r := result(err)
 	if err != nil && len(r.Errors) == 0 {
 		r.Message = "Не удалось добавить актив. Повторите попытку"
 	}
-	return AssetResultDTO{AssetDTO{asset.ID, asset.Ticker}, r.Errors, r.Message}
+	return AssetResultDTO{AssetDTO{asset.ID, asset.Ticker, asset.TypeCode}, r.Errors, r.Message}
 }
 func (a *CashFlowAPI) SaveTrade(pid, id string, in TradeInputDTO) CashResultDTO {
 	if !validID(pid) {
@@ -234,4 +235,43 @@ func (a *CashFlowAPI) PreviewTrade(kind, quantity, amount, expenses string) Trad
 type CashWarningDTO struct {
 	Date    string `json:"date"`
 	Balance string `json:"balance"`
+}
+
+type AssetInputDTO struct {
+	Ticker   string `json:"ticker"`
+	TypeCode string `json:"typeCode"`
+}
+type AssetTypeInputDTO struct {
+	ID       string `json:"id"`
+	TypeCode string `json:"typeCode"`
+}
+type AssetTypeDTO struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+func (a *CashFlowAPI) ListAssetTypes() []AssetTypeDTO {
+	out := []AssetTypeDTO{}
+	for _, v := range operations.AssetTypes() {
+		out = append(out, AssetTypeDTO{v.Code, v.Name})
+	}
+	return out
+}
+func (a *CashFlowAPI) UpdateAssetType(in AssetTypeInputDTO) AssetResultDTO {
+	if !validID(in.ID) {
+		return AssetResultDTO{Errors: map[string]string{}, Message: operations.ErrAssetNotFound.Error()}
+	}
+	var asset operations.Asset
+	err := a.useService(func(s *operations.Service) error {
+		var err error
+		asset, err = s.UpdateAssetType(context.Background(), in.ID, in.TypeCode)
+		return err
+	})
+	r := result(err)
+	if errors.Is(err, operations.ErrAssetNotFound) {
+		r.Message = operations.ErrAssetNotFound.Error()
+	} else if err != nil && len(r.Errors) == 0 {
+		r.Message = "Не удалось изменить тип актива. Повторите попытку"
+	}
+	return AssetResultDTO{AssetDTO{asset.ID, asset.Ticker, asset.TypeCode}, r.Errors, r.Message}
 }

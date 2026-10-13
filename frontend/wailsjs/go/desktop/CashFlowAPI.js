@@ -10,6 +10,10 @@ export function DeleteCashFlow(arg1, arg2) {
   return window['go']['desktop']['CashFlowAPI']['DeleteCashFlow'](arg1, arg2);
 }
 
+export function ListAssetTypes() {
+  return window['go']['desktop']['CashFlowAPI']['ListAssetTypes']();
+}
+
 export function ListAssets() {
   return window['go']['desktop']['CashFlowAPI']['ListAssets']();
 }
@@ -32,4 +36,8 @@ export function SaveCashFlow(arg1, arg2, arg3) {
 
 export function SaveTrade(arg1, arg2, arg3) {
   return window['go']['desktop']['CashFlowAPI']['SaveTrade'](arg1, arg2, arg3);
+}
+
+export function UpdateAssetType(arg1) {
+  return window['go']['desktop']['CashFlowAPI']['UpdateAssetType'](arg1);
 }

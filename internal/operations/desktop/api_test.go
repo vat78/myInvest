@@ -98,11 +98,11 @@ func TestTradeBridge(t *testing.T) {
 	api := NewAPI(func(fn func(*operations.Service) error) error {
 		return fn(operations.NewService(operationssqlite.NewRepository(store.DB())))
 	})
-	asset := api.AddAsset(" sber ")
+	asset := api.AddAsset(AssetInputDTO{Ticker: " sber ", TypeCode: "stocks"})
 	if asset.Message != "" || len(asset.Errors) > 0 || asset.Asset.Ticker != "SBER" {
 		t.Fatal(asset)
 	}
-	if got := api.AddAsset("SBER"); got.Errors["ticker"] == "" {
+	if got := api.AddAsset(AssetInputDTO{Ticker: "SBER", TypeCode: "stocks"}); got.Errors["ticker"] == "" {
 		t.Fatal(got)
 	}
 	preview := api.PreviewTrade("buy", "6", "1", "0")
@@ -149,5 +149,55 @@ func TestTradeBridge(t *testing.T) {
 	assets, err := api.ListAssets()
 	if err != nil || len(assets) != 1 {
 		t.Fatal(assets, err)
+	}
+}
+
+func TestAssetTypeBridge(t *testing.T) {
+	store, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "db.sqlite3"), migrations.Files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	api := NewAPI(func(fn func(*operations.Service) error) error {
+		return fn(operations.NewService(operationssqlite.NewRepository(store.DB())))
+	})
+	if len(api.ListAssetTypes()) != 7 || api.ListAssetTypes()[0].Name != "Commodities" {
+		t.Fatal(api.ListAssetTypes())
+	}
+	for _, code := range []string{"", "invalid"} {
+		got := api.AddAsset(AssetInputDTO{Ticker: "NEW", TypeCode: code})
+		if got.Errors["typeCode"] == "" {
+			t.Fatal(got)
+		}
+	}
+	asset := api.AddAsset(AssetInputDTO{Ticker: "NEW", TypeCode: "stocks"}).Asset
+	for _, code := range []string{"", "invalid"} {
+		got := api.UpdateAssetType(AssetTypeInputDTO{ID: asset.ID, TypeCode: code})
+		if got.Errors["typeCode"] == "" {
+			t.Fatal(got)
+		}
+	}
+	for _, id := range []string{"0", "01", "-1", "1.0", "9223372036854775808", "9999"} {
+		got := api.UpdateAssetType(AssetTypeInputDTO{ID: id, TypeCode: "bonds"})
+		if got.Message != "Актив не найден" {
+			t.Fatal(got)
+		}
+	}
+	got := api.UpdateAssetType(AssetTypeInputDTO{ID: asset.ID, TypeCode: "bonds"})
+	if got.Message != "" || len(got.Errors) > 0 || got.Asset.ID != asset.ID || got.Asset.TypeCode != "bonds" {
+		t.Fatal(got)
+	}
+	rows, err := api.ListAssets()
+	if err != nil || len(rows) != 1 || rows[0] != got.Asset {
+		t.Fatal(rows, err)
+	}
+	private := NewAPI(func(func(*operations.Service) error) error { return errors.New("SQL private path") })
+	for _, got := range []AssetResultDTO{private.AddAsset(AssetInputDTO{Ticker: "NEW", TypeCode: "stocks"}), private.UpdateAssetType(AssetTypeInputDTO{ID: "1", TypeCode: "bonds"})} {
+		if got.Message == "" || strings.Contains(got.Message, "SQL") {
+			t.Fatal(got)
+		}
+	}
+	if _, err := private.ListAssets(); err == nil || strings.Contains(err.Error(), "SQL") {
+		t.Fatal(err)
 	}
 }
