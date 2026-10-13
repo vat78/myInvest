@@ -7,6 +7,9 @@ import (
 	"sync"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"myinvest/internal/cashflow"
+	cashdesktop "myinvest/internal/cashflow/desktop"
+	cashsqlite "myinvest/internal/cashflow/sqlite"
 	"myinvest/internal/currency"
 	"myinvest/internal/currency/desktop"
 	currencysqlite "myinvest/internal/currency/sqlite"
@@ -18,6 +21,7 @@ import (
 )
 
 type App struct {
+	cashFlows  *cashdesktop.CashFlowAPI
 	ready      chan struct{}
 	mu         sync.Mutex
 	store      *sqlite.Store
@@ -39,6 +43,9 @@ func newApp() *App {
 	})
 	a.portfolios = portfoliodesktop.NewAPI(func(fn func(*portfolio.Service) error) error {
 		return a.withStorage(func(db *sql.DB) error { return fn(portfolio.NewService(portfoliosqlite.NewRepository(db))) })
+	})
+	a.cashFlows = cashdesktop.NewAPI(func(fn func(*cashflow.Service) error) error {
+		return a.withStorage(func(db *sql.DB) error { return fn(cashflow.NewService(cashsqlite.NewRepository(db))) })
 	})
 	return a
 }

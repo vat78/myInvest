@@ -8,12 +8,12 @@ import ts from 'typescript';
 function harness(overrides = {}) {
   const source = readFileSync(new URL('./PortfolioManager.svelte', import.meta.url), 'utf8');
   const { instance } = parse(source);
-  const script = source.slice(instance.content.start, instance.content.end).replace(/^\s*import .*;$/gm, '');
+  const script = source.slice(instance.content.start, instance.content.end).replace(/^\s*import .*;$/gm, '').replace(/export function /g, 'function ');
   const writes = [];
   const calls = { focus: [], lists: 0 };
   const ok = { portfolio: { id: '1' }, errors: {}, message: '' };
   const sandbox = {
-    $state: v => v, tick: async () => {}, onDestroy: () => {}, localDate: () => '2026-10-13',
+    $state: v => v, $props: () => ({}), tick: async () => {}, onDestroy: () => {}, localDate: () => '2026-10-13',
     ListCurrencies: async () => ['RUB', 'USD'],
     ListPortfolios: async () => { calls.lists++; return []; },
     CreatePortfolio: async input => { writes.push(input); return ok; },

@@ -3,6 +3,7 @@
   import { ListCurrencies } from '../wailsjs/go/desktop/API';
   import { ListPortfolios, CreatePortfolio, UpdatePortfolio } from '../wailsjs/go/desktop/PortfolioAPI';
   import { localDate } from './calendar';
+  let { onchanged = () => {} }: { onchanged?: () => void } = $props();
   type Portfolio = { id: string; name: string; openedOn: string; currencyCode: string };
   let menu = $state(false);
   let menuRoot: HTMLDivElement;
@@ -52,7 +53,7 @@
       if (alive && opened && request === listRequest) listError = 'Не удалось загрузить портфели. Повторите попытку';
     } finally { if (request === listRequest) loading = false; }
   }
-  function openList() {
+  export function openList() {
     menu = false; opened = true;
     listDialog.showModal();
     void loadList();
@@ -104,6 +105,7 @@
       formDialog.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
       return;
     }
+    onchanged();
     const savedID = id;
     closeForm();
     // Refreshing the list must not change the busy state of a later save.
