@@ -13,7 +13,7 @@ const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve();
 function harness(overrides = {}) {
   const source = readFileSync(new URL('./CashFlowManager.svelte', import.meta.url), 'utf8');
   const { instance } = parse(source);
-  const script = source.slice(instance.content.start, instance.content.end).replace(/^\s*import .*;$/gm, '');
+  const script = source.slice(instance.content.start, instance.content.end).replace(/^\s*import .*;$/gm, '').replace(/export /g, '');
   const effects = [], writes = [], removals = [], focus = [];
   const sandbox = {
     formatDecimal,
@@ -21,6 +21,9 @@ function harness(overrides = {}) {
     $derived: value => value, $effect: fn => effects.push(fn),
     tick: async () => {}, onDestroy() {}, localDate: () => '2026-10-13', setTimeout, clearTimeout,
     ListPortfolios: async () => portfolios, ListCurrencies: async () => ['RUB', 'USD'],
+    ListAssets: async () => [{id:'1',ticker:'SBER'}],
+    SaveTrade: async (pid,id,input) => { writes.push({pid,id,...input}); return ok; },
+    PreviewTrade: async () => ({averagePrice:'100',rounded:false,moneyChange:'-255',errors:{}}),
     ListCashFlows: async () => snapshot(), PreviewCashRate: async () => ({ rate: '94.5', errors: {} }),
     SaveCashFlow: async (pid, id, input) => { writes.push({ pid, id, ...input }); return ok; },
     DeleteCashFlow: async (pid, id) => { removals.push({ pid, id }); return ok; },
@@ -42,10 +45,12 @@ function harness(overrides = {}) {
       enter(a,b='',c='') {amount=a;portfolioAmount=b;comment=c;},
       currency(code) {currencyCode=code;different=code!==portfolio.currencyCode;currencyChanged();},
       save() {return save({preventDefault(){}})}, close,
+      tradeEnter(asset,q,a,e='0') {assetID=asset;quantity=q;amount=a;expenses=e;},
+      assetAdded, loadAssets, tradePreview() {return effects[2]()},
       askDelete(op) {askDelete(op,trigger)}, closeDelete, remove,
       preview() {return effects[1]()},
       disconnectTrigger() {trigger.isConnected=false;root={querySelector(selector){focus.push(selector);return {focus(){focus.push('replacement')}}}}},
-      get state() {return {selected,snapshot,loading,error,listError,listLoading,editing,deleting,busy,amount,portfolioAmount,currencyCode,date,rate,message,errors}},
+      get state() {return {selected,snapshot,loading,error,listError,listLoading,editing,deleting,busy,amount,portfolioAmount,currencyCode,date,rate,message,errors,assetID,quantity,expenses,assetError,price,priceRounded,moneyChange,previewError}},
     };
   `, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, sandbox);
   return { ui: sandbox.ui, writes, removals, focus };
@@ -125,4 +130,41 @@ test('preview uses Go result and discards obsolete response', async () => {
 test('successful edit returns focus to replacement row after refresh', async () => {
   const {ui,focus}=harness();await ui.loadPortfolios();await ui.open({id:'7',kind:'deposit',date:'2026-01-01',currencyCode:'RUB',amount:'1',portfolioAmount:'1',comment:''});await flush();
   ui.disconnectTrigger();await ui.save();assert.equal(focus.at(-1),'replacement');assert.equal(focus.at(-2),'[data-cash-id="7"]');
+});
+
+test('trade form defaults, exact strings, errors, selection of a new asset and cancel', async () => {
+  const {ui,writes} = harness(); await ui.loadPortfolios(); await ui.open(null,'buy'); await flush();
+  assert.equal(ui.state.assetID,''); assert.equal(ui.state.expenses,'0');
+  await ui.assetAdded({id:'1',ticker:'SBER'}); assert.equal(ui.state.assetID,'1');
+  ui.tradeEnter('1','2,5','250','5'); await ui.save();
+  assert.equal(writes[0].quantity,'2,5'); assert.equal(writes[0].expenses,'5');
+  assert.equal(writes[0].currencyCode,undefined); assert.equal(writes[0].portfolioAmount,undefined);
+  assert.equal(ui.state.editing,false);
+  await ui.open(null,'sell'); ui.close(); assert.equal(writes.length,1);
+});
+test('failed trade retains values and prohibits repeated writes', async () => {
+  let resolve,count=0;
+  const {ui,focus}=harness({SaveTrade:()=>{count++;return new Promise(r=>{resolve=r})}});
+  await ui.loadPortfolios();await ui.open(null,'sell');await flush();ui.tradeEnter('1','0','120','2');
+  const pending=ui.save();await ui.save();ui.close();assert.equal(count,1);assert.equal(ui.state.editing,true);
+  resolve({errors:{quantity:'invalid'},message:''});await pending;
+  assert.equal(ui.state.quantity,'0');assert.equal(ui.state.expenses,'2');assert.equal(focus.at(-1),'error');
+});
+test('trade preview discards outdated and closed-form results', async () => {
+  const pending=[];
+  const {ui}=harness({PreviewTrade:(k,q,a,e)=>new Promise(resolve=>pending.push({k,q,a,e,resolve}))});
+  await ui.loadPortfolios();await ui.open(null,'buy');await flush();
+  ui.tradeEnter('1','3','1');ui.tradePreview();await new Promise(r=>setTimeout(r,220));
+  ui.tradeEnter('1','6','1');ui.tradePreview();await new Promise(r=>setTimeout(r,220));
+  pending[1].resolve({averagePrice:'0.166666666666666667',rounded:true,moneyChange:'-1',errors:{}});await flush();
+  pending[0].resolve({averagePrice:'old',rounded:false,moneyChange:'old',errors:{}});await flush();
+  assert.equal(ui.state.price,'0.166666666666666667');assert.equal(ui.state.priceRounded,true);
+  ui.tradeEnter('1','2','1');ui.tradePreview();await new Promise(r=>setTimeout(r,220));ui.close();
+  pending[2].resolve({averagePrice:'closed',moneyChange:'closed',errors:{}});await flush();assert.notEqual(ui.state.price,'closed');
+});
+test('failed asset read blocks saving and supports retry', async () => {
+  let fails=true;
+  const {ui,writes}=harness({ListAssets:async()=>{if(fails)throw new Error('SQL');return [{id:'1',ticker:'SBER'}]}});
+  await ui.loadPortfolios();await ui.open(null,'buy');await flush();ui.tradeEnter('1','1','1');await ui.save();
+  assert.equal(writes.length,0);assert.ok(ui.state.assetError);fails=false;await ui.loadAssets();await ui.save();assert.equal(writes.length,1);
 });

@@ -24,6 +24,11 @@ func (r *Repository) Transaction(ctx context.Context, fn func(cashflow.Repositor
 		return err
 	}
 	defer tx.Rollback()
+	// Acquire the SQLite writer reservation before reading history, preventing
+	// lost updates and deferred read-to-write upgrade failures. No rows change.
+	if _, err = tx.ExecContext(ctx, "UPDATE portfolios SET id=id WHERE 0"); err != nil {
+		return err
+	}
 	if err = fn(&Repository{q: tx}); err != nil {
 		return err
 	}
@@ -43,18 +48,55 @@ func (r *Repository) CurrencyExists(ctx context.Context, code string) (bool, err
 	return ok, err
 }
 
-const columns = "id,portfolio_id,kind,date,currency_code,amount,portfolio_amount,comment"
+const columns = `o.id,o.portfolio_id,o.kind,o.date,o.comment,
+ coalesce(c.currency_code,''),coalesce(c.amount,t.amount,''),coalesce(c.portfolio_amount,''),
+ coalesce(t.asset_id,''),coalesce(t.quantity,''),coalesce(t.expenses,''),coalesce(t.average_price,''),coalesce(a.ticker,''),
+ c.operation_id,t.operation_id`
+const joins = ` FROM operations o LEFT JOIN cash_flow_details c ON c.operation_id=o.id
+ LEFT JOIN trade_details t ON t.operation_id=o.id LEFT JOIN assets a ON a.id=t.asset_id `
 
 func scan(row interface{ Scan(...any) error }) (cashflow.Operation, error) {
 	var o cashflow.Operation
-	err := row.Scan(&o.ID, &o.PortfolioID, &o.Kind, &o.Date, &o.CurrencyCode, &o.Amount, &o.PortfolioAmount, &o.Comment)
+	var cashID, tradeID sql.NullString
+	err := row.Scan(&o.ID, &o.PortfolioID, &o.Kind, &o.Date, &o.Comment, &o.CurrencyCode, &o.Amount, &o.PortfolioAmount, &o.AssetID, &o.Quantity, &o.Expenses, &o.AveragePrice, &o.Ticker, &cashID, &tradeID)
 	if errors.Is(err, sql.ErrNoRows) {
-		err = cashflow.ErrNotFound
+		return o, cashflow.ErrNotFound
 	}
-	return o, err
+	if err != nil {
+		return o, err
+	}
+	if cashflow.IsTrade(o.Kind) {
+		if !tradeID.Valid || cashID.Valid || o.Ticker == "" {
+			return o, errors.New("incomplete trade details")
+		}
+		in, err := cashflow.ValidateTrade(o.Input)
+		if err != nil {
+			return o, err
+		}
+		o.Input = in
+		price, rounded, err := cashflow.AveragePrice(o.Amount, o.Quantity)
+		if err != nil {
+			return o, err
+		}
+		if price != o.AveragePrice {
+			return o, errors.New("invalid stored average price")
+		}
+		o.Rounded = rounded
+	} else {
+		if !cashID.Valid || tradeID.Valid {
+			return o, errors.New("incomplete cash details")
+		}
+		if _, err := cashflow.Amount(o.Amount); err != nil {
+			return o, err
+		}
+		if _, err := cashflow.Amount(o.PortfolioAmount); err != nil {
+			return o, err
+		}
+	}
+	return o, nil
 }
 func (r *Repository) List(ctx context.Context, pid string) ([]cashflow.Operation, error) {
-	rows, err := r.q.QueryContext(ctx, "SELECT "+columns+" FROM cash_flows WHERE portfolio_id=? ORDER BY date DESC,id DESC", pid)
+	rows, err := r.q.QueryContext(ctx, "SELECT "+columns+joins+"WHERE o.portfolio_id=? ORDER BY o.date DESC,o.id DESC", pid)
 	if err != nil {
 		return nil, err
 	}
@@ -70,22 +112,139 @@ func (r *Repository) List(ctx context.Context, pid string) ([]cashflow.Operation
 	return out, rows.Err()
 }
 func (r *Repository) Find(ctx context.Context, pid, id string) (cashflow.Operation, error) {
-	return scan(r.q.QueryRowContext(ctx, "SELECT "+columns+" FROM cash_flows WHERE portfolio_id=? AND id=?", pid, id))
+	return scan(r.q.QueryRowContext(ctx, "SELECT "+columns+joins+"WHERE o.portfolio_id=? AND o.id=?", pid, id))
 }
 func (r *Repository) Save(ctx context.Context, o cashflow.Operation) (cashflow.Operation, error) {
+	var err error
 	if o.ID == "" {
-		return scan(r.q.QueryRowContext(ctx, "INSERT INTO cash_flows(portfolio_id,kind,date,currency_code,amount,portfolio_amount,comment) VALUES (?,?,?,?,?,?,?) RETURNING "+columns, o.PortfolioID, o.Kind, o.Date, o.CurrencyCode, o.Amount, o.PortfolioAmount, o.Comment))
+		err = r.q.QueryRowContext(ctx, "INSERT INTO operations(portfolio_id,kind,date,comment) VALUES (?,?,?,?) RETURNING id", o.PortfolioID, o.Kind, o.Date, o.Comment).Scan(&o.ID)
+	} else {
+		res, e := r.q.ExecContext(ctx, "UPDATE operations SET kind=?,date=?,comment=? WHERE portfolio_id=? AND id=?", o.Kind, o.Date, o.Comment, o.PortfolioID, o.ID)
+		err = e
+		if err == nil {
+			n, e := res.RowsAffected()
+			err = e
+			if n == 0 {
+				err = cashflow.ErrNotFound
+			}
+		}
 	}
-	return scan(r.q.QueryRowContext(ctx, "UPDATE cash_flows SET kind=?,date=?,currency_code=?,amount=?,portfolio_amount=?,comment=? WHERE portfolio_id=? AND id=? RETURNING "+columns, o.Kind, o.Date, o.CurrencyCode, o.Amount, o.PortfolioAmount, o.Comment, o.PortfolioID, o.ID))
+	if err != nil {
+		return o, err
+	}
+	if cashflow.IsTrade(o.Kind) {
+		_, err = r.q.ExecContext(ctx, `INSERT INTO trade_details(operation_id,asset_id,quantity,amount,expenses,average_price) VALUES (?,?,?,?,?,?)
+  ON CONFLICT(operation_id) DO UPDATE SET asset_id=excluded.asset_id,quantity=excluded.quantity,amount=excluded.amount,expenses=excluded.expenses,average_price=excluded.average_price`, o.ID, o.AssetID, o.Quantity, o.Amount, o.Expenses, o.AveragePrice)
+	} else {
+		_, err = r.q.ExecContext(ctx, `INSERT INTO cash_flow_details(operation_id,currency_code,amount,portfolio_amount) VALUES (?,?,?,?)
+  ON CONFLICT(operation_id) DO UPDATE SET currency_code=excluded.currency_code,amount=excluded.amount,portfolio_amount=excluded.portfolio_amount`, o.ID, o.CurrencyCode, o.Amount, o.PortfolioAmount)
+	}
+	if err != nil {
+		return o, err
+	}
+	if err = r.rebuild(ctx, o.PortfolioID); err != nil {
+		return o, err
+	}
+	return r.Find(ctx, o.PortfolioID, o.ID)
 }
 func (r *Repository) Delete(ctx context.Context, pid, id string) error {
-	res, err := r.q.ExecContext(ctx, "DELETE FROM cash_flows WHERE portfolio_id=? AND id=?", pid, id)
+	res, err := r.q.ExecContext(ctx, "DELETE FROM operations WHERE portfolio_id=? AND id=?", pid, id)
 	if err != nil {
 		return err
 	}
 	n, err := res.RowsAffected()
-	if err == nil && n == 0 {
+	if err != nil {
+		return err
+	}
+	if n == 0 {
 		return cashflow.ErrNotFound
 	}
-	return err
+	return r.rebuild(ctx, pid)
+}
+func (r *Repository) ListAssets(ctx context.Context) ([]cashflow.Asset, error) {
+	rows, err := r.q.QueryContext(ctx, "SELECT id,ticker FROM assets ORDER BY ticker")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []cashflow.Asset{}
+	for rows.Next() {
+		var a cashflow.Asset
+		if err := rows.Scan(&a.ID, &a.Ticker); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+func (r *Repository) AssetExists(ctx context.Context, id string) (bool, error) {
+	var found bool
+	err := r.q.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM assets WHERE id=?)", id).Scan(&found)
+	return found, err
+}
+func (r *Repository) AddAsset(ctx context.Context, ticker string) (cashflow.Asset, error) {
+	var out cashflow.Asset
+	var exists bool
+	if err := r.q.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM assets WHERE ticker=?)", ticker).Scan(&exists); err != nil {
+		return out, err
+	}
+	if exists {
+		return out, &cashflow.FieldError{Field: "ticker", Message: "Такой тикер уже существует"}
+	}
+	err := r.q.QueryRowContext(ctx, "INSERT INTO assets(ticker) VALUES (?) RETURNING id,ticker", ticker).Scan(&out.ID, &out.Ticker)
+	return out, err
+}
+func (r *Repository) rebuild(ctx context.Context, pid string) error {
+	ops, err := r.List(ctx, pid)
+	if err != nil {
+		return err
+	}
+	history, err := cashflow.Rebuild(ops)
+	if err != nil {
+		return err
+	}
+	if _, err = r.q.ExecContext(ctx, "DELETE FROM daily_cash_balances WHERE portfolio_id=?", pid); err != nil {
+		return err
+	}
+	for _, day := range history.Days {
+		if _, err = r.q.ExecContext(ctx, "INSERT INTO daily_cash_balances(portfolio_id,date,balance) VALUES (?,?,?)", pid, day.Date, day.Balance); err != nil {
+			return err
+		}
+		for aid, q := range day.Quantities {
+			if _, err = r.q.ExecContext(ctx, "INSERT INTO daily_asset_balances(portfolio_id,date,asset_id,quantity) VALUES (?,?,?,?)", pid, day.Date, aid, q); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// RebuildAll is the exact data step of migration 0005. It shares the live writer's
+// calculation and persistence and runs in the same transaction as the SQL.
+func RebuildAll(ctx context.Context, tx *sql.Tx) error {
+	r := &Repository{q: tx}
+	rows, err := tx.QueryContext(ctx, "SELECT id FROM portfolios")
+	if err != nil {
+		return err
+	}
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err := r.rebuild(ctx, id); err != nil {
+			return err
+		}
+	}
+	return nil
 }

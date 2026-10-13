@@ -1,4 +1,4 @@
-// Package cashflow defines external portfolio cash movements.
+// Package cashflow defines the unified portfolio operation history.
 package cashflow
 
 import (
@@ -9,9 +9,14 @@ import (
 	"time"
 )
 
-type Input struct{ Kind, Date, CurrencyCode, Amount, PortfolioAmount, Comment string }
+type Input struct {
+	Kind, Date, CurrencyCode, Amount, PortfolioAmount, Comment string
+	AssetID, Quantity, Expenses                                string
+}
 type Operation struct {
-	ID, PortfolioID string
+	ID, PortfolioID      string
+	Ticker, AveragePrice string
+	Rounded              bool
 	Input
 }
 type FieldError struct{ Field, Message string }
@@ -105,12 +110,7 @@ func Validate(in Input, portfolioCurrency string) (Input, error) {
 func Balance(operations []Operation) string {
 	total := new(big.Rat)
 	for _, op := range operations {
-		v := rational(op.PortfolioAmount)
-		if op.Kind == "withdrawal" {
-			total.Sub(total, v)
-		} else {
-			total.Add(total, v)
-		}
+		total.Add(total, rational(MoneyChange(op)))
 	}
 	return exact(total)
 }

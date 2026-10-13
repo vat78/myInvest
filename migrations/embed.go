@@ -1,9 +1,24 @@
-// Package migrations contains the versioned SQL shipped with the application.
+// Package migrations contains the versioned SQL and exact data steps shipped with the application.
 package migrations
 
-import "embed"
+import (
+	"context"
+	"database/sql"
+	"embed"
+	cashsqlite "myinvest/internal/cashflow/sqlite"
+)
 
-// Files is available without access to the source checkout.
-//
 //go:embed *.sql
-var Files embed.FS
+var scripts embed.FS
+
+type bundle struct{ embed.FS }
+
+// Files contains SQL and its transactional Go data migration hook.
+var Files = bundle{scripts}
+
+func (bundle) AfterMigration(ctx context.Context, version int, tx *sql.Tx) error {
+	if version == 5 {
+		return cashsqlite.RebuildAll(ctx, tx)
+	}
+	return nil
+}

@@ -10,6 +10,9 @@ type Repository interface {
 	Find(context.Context, string, string) (Operation, error)
 	Save(context.Context, Operation) (Operation, error)
 	Delete(context.Context, string, string) error
+	ListAssets(context.Context) ([]Asset, error)
+	AddAsset(context.Context, string) (Asset, error)
+	AssetExists(context.Context, string) (bool, error)
 }
 type Service struct{ repo Repository }
 
@@ -18,6 +21,8 @@ func NewService(repo Repository) *Service { return &Service{repo} }
 type Snapshot struct {
 	CurrencyCode, Balance string
 	Operations            []Operation
+	Warnings              []Warning
+	CashWarnings          []CashWarning
 }
 
 func (s *Service) List(ctx context.Context, pid string) (Snapshot, error) {
@@ -32,7 +37,13 @@ func (s *Service) List(ctx context.Context, pid string) (Snapshot, error) {
 		if err != nil {
 			return err
 		}
-		out.Balance = Balance(out.Operations)
+		history, err := Rebuild(out.Operations)
+		if err != nil {
+			return err
+		}
+		out.Balance = history.Balance
+		out.Warnings = history.Warnings
+		out.CashWarnings = history.CashWarnings
 		return nil
 	})
 	return out, err
@@ -45,9 +56,33 @@ func (s *Service) Save(ctx context.Context, pid, id string, in Input) (Operation
 			return err
 		}
 		if id != "" {
-			if _, err = r.Find(ctx, pid, id); err != nil {
+			old, findErr := r.Find(ctx, pid, id)
+			err = findErr
+			if err != nil {
 				return err
 			}
+			if IsTrade(old.Kind) != IsTrade(in.Kind) {
+				return &FieldError{"kind", "Нельзя изменить вид операции"}
+			}
+		}
+		if IsTrade(in.Kind) {
+			in, err = ValidateTrade(in)
+			if err != nil {
+				return err
+			}
+			exists, err := r.AssetExists(ctx, in.AssetID)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				return &FieldError{"assetID", "Выберите актив из справочника"}
+			}
+			price, rounded, err := AveragePrice(in.Amount, in.Quantity)
+			if err != nil {
+				return err
+			}
+			out, err = r.Save(ctx, Operation{ID: id, PortfolioID: pid, Input: in, AveragePrice: price, Rounded: rounded})
+			return err
 		}
 		in, err = Validate(in, code)
 		if err != nil {
@@ -72,4 +107,15 @@ func (s *Service) Delete(ctx context.Context, pid, id string) error {
 		}
 		return r.Delete(ctx, pid, id)
 	})
+}
+
+func (s *Service) ListAssets(ctx context.Context) ([]Asset, error) { return s.repo.ListAssets(ctx) }
+func (s *Service) AddAsset(ctx context.Context, value string) (Asset, error) {
+	ticker, err := Ticker(value)
+	if err != nil {
+		return Asset{}, err
+	}
+	var out Asset
+	err = s.repo.Transaction(ctx, func(r Repository) error { var err error; out, err = r.AddAsset(ctx, ticker); return err })
+	return out, err
 }
