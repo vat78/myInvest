@@ -144,7 +144,7 @@
         <label>Вторая валюта <input list="currency-codes" bind:value={quote} oninput={(event) => { quote = event.currentTarget.value; void loadRate(); }} placeholder="RUB" autocomplete="off" required /></label>
       </div>
       <datalist id="currency-codes">
-        {#each currencies as code}<option value={code}>{code}</option><option value={code.toLowerCase()}>{code}</option>{/each}
+        {#each currencies as code}<option value={code}></option>{/each}
       </datalist>
       {#each unknown as code}
         <div class="add"><span>{code} отсутствует в справочнике</span><button type="button" onclick={() => void addCurrency(code)}>Добавить {code}</button></div>
