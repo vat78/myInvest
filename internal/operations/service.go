@@ -11,7 +11,8 @@ type Repository interface {
 	Save(context.Context, Operation) (Operation, error)
 	Delete(context.Context, string, string) error
 	ListAssets(context.Context) ([]Asset, error)
-	AddAsset(context.Context, string) (Asset, error)
+	AddAsset(context.Context, string, string) (Asset, error)
+	UpdateAssetType(context.Context, string, string) (Asset, error)
 	AssetExists(context.Context, string) (bool, error)
 }
 type Service struct{ repo Repository }
@@ -130,12 +131,32 @@ func (s *Service) Delete(ctx context.Context, pid, id string) error {
 }
 
 func (s *Service) ListAssets(ctx context.Context) ([]Asset, error) { return s.repo.ListAssets(ctx) }
-func (s *Service) AddAsset(ctx context.Context, value string) (Asset, error) {
+func (s *Service) AddAsset(ctx context.Context, value, typeCode string) (Asset, error) {
 	ticker, err := Ticker(value)
 	if err != nil {
 		return Asset{}, err
 	}
+	if err := ValidateAssetType(typeCode); err != nil {
+		return Asset{}, err
+	}
 	var out Asset
-	err = s.repo.Transaction(ctx, func(r Repository) error { var err error; out, err = r.AddAsset(ctx, ticker); return err })
+	err = s.repo.Transaction(ctx, func(r Repository) error {
+		var err error
+		out, err = r.AddAsset(ctx, ticker, typeCode)
+		return err
+	})
+	return out, err
+}
+
+func (s *Service) UpdateAssetType(ctx context.Context, id, typeCode string) (Asset, error) {
+	if err := ValidateAssetType(typeCode); err != nil {
+		return Asset{}, err
+	}
+	var out Asset
+	err := s.repo.Transaction(ctx, func(r Repository) error {
+		var err error
+		out, err = r.UpdateAssetType(ctx, id, typeCode)
+		return err
+	})
 	return out, err
 }

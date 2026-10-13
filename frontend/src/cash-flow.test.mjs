@@ -48,9 +48,9 @@ function harness(overrides = {}) {
       currency(code) {currencyCode=code;different=code!==portfolio.currencyCode;currencyChanged();},
       save() {return save({preventDefault(){}})}, close,
       tradeEnter(asset,q,a,e='0') {assetID=asset;quantity=q;amount=a;expenses=e;},
+      assetAdded, refreshAssets, loadAssets, tradePreview() {return effects[2]()},
       splitEnter(asset,old,next,d=date) {assetID=asset;oldUnits=old;newUnits=next;date=d;},
       splitPreview() {return effects[3]()},
-      assetAdded, loadAssets, tradePreview() {return effects[2]()},
       askDelete(op) {askDelete(op,trigger)}, closeDelete, remove,
       preview() {return effects[1]()},
       disconnectTrigger() {trigger.isConnected=false;root={querySelector(selector){focus.push(selector);return {focus(){focus.push('replacement')}}}}},
@@ -171,6 +171,12 @@ test('failed asset read blocks saving and supports retry', async () => {
   const {ui,writes}=harness({ListAssets:async()=>{if(fails)throw new Error('SQL');return [{id:'1',ticker:'SBER'}]}});
   await ui.loadPortfolios();await ui.open(null,'buy');await flush();ui.tradeEnter('1','1','1');await ui.save();
   assert.equal(writes.length,0);assert.ok(ui.state.assetError);fails=false;await ui.loadAssets();await ui.save();assert.equal(writes.length,1);
+});
+
+test('type refresh preserves the selected trade asset',async()=>{
+ const {ui}=harness();await ui.loadPortfolios();await ui.open(null,'buy');await flush();
+ await ui.assetAdded({id:'42',ticker:'OLD',typeCode:''});assert.equal(ui.state.assetID,'42');
+ await ui.refreshAssets();assert.equal(ui.state.assetID,'42');
 });
 
 test('split form sends exact integer strings, defaults, edit values and Enter handler', async () => {

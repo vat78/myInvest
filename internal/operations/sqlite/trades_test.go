@@ -29,11 +29,11 @@ func scalarString(t *testing.T, db *sql.DB, query string, args ...any) string {
 }
 func TestUnifiedTradesAndDailyBalances(t *testing.T) {
 	store, s, path := setup(t)
-	asset, err := s.AddAsset(ctx, " sber ")
+	asset, err := s.AddAsset(ctx, " sber ", "stocks")
 	if err != nil || asset.Ticker != "SBER" {
 		t.Fatal(asset, err)
 	}
-	if _, err = s.AddAsset(ctx, "sBeR"); err == nil {
+	if _, err = s.AddAsset(ctx, "sBeR", "stocks"); err == nil {
 		t.Fatal("duplicate ticker")
 	}
 	deposit, err := s.Save(ctx, "1", "", operations.Input{Kind: "deposit", Date: "2026-01-01", CurrencyCode: "RUB", Amount: "1000", PortfolioAmount: "1000"})
@@ -154,11 +154,11 @@ func TestUnifiedTradesAndDailyBalances(t *testing.T) {
 }
 func TestTradeUpdatesAssetDirectionPriceAndSameDayOrder(t *testing.T) {
 	store, s, _ := setup(t)
-	a, err := s.AddAsset(ctx, "A")
+	a, err := s.AddAsset(ctx, "A", "stocks")
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := s.AddAsset(ctx, "B")
+	b, err := s.AddAsset(ctx, "B", "stocks")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +191,7 @@ func TestTradeUpdatesAssetDirectionPriceAndSameDayOrder(t *testing.T) {
 }
 func TestAtomicRebuildFailureAndIncompleteRead(t *testing.T) {
 	store, s, _ := setup(t)
-	asset, err := s.AddAsset(ctx, "SBER")
+	asset, err := s.AddAsset(ctx, "SBER", "stocks")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -352,7 +352,7 @@ func TestMigrationExactDataStepRollback(t *testing.T) {
 }
 func TestConcurrentHistoryWrites(t *testing.T) {
 	store, s, _ := setup(t)
-	a, err := s.AddAsset(ctx, "A")
+	a, err := s.AddAsset(ctx, "A", "stocks")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -384,7 +384,7 @@ func TestConcurrentHistoryWrites(t *testing.T) {
 
 func TestDetailIntegrityAndCascade(t *testing.T) {
 	store, s, _ := setup(t)
-	a, err := s.AddAsset(ctx, "A")
+	a, err := s.AddAsset(ctx, "A", "stocks")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -50,6 +50,9 @@
     if (!editing || (!isTrade(kind) && kind !== 'split')) return;
     assetID = asset.id; await loadAssets();
   }
+  export async function refreshAssets() {
+    if (editing && isTrade(kind)) await loadAssets();
+  }
   async function loadAssets() {
     const request = ++assetRequest; assetLoading = true; assetError = '';
     try { const rows = await ListAssets(); if (alive && editing && request === assetRequest) assets = rows; }

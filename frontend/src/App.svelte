@@ -129,7 +129,7 @@
   <button class:missing={!todayRate} class="rate" onclick={openEditor} aria-label="Ввести или изменить курс валют">
     {todayRate ? `1 USD = ${formatDecimal(todayRate)} RUB` : '???'}
   </button>
-  <div class="menu-slot"><AssetManager bind:this={assetManager} onadded={asset => cashManager.assetAdded(asset)} /><PortfolioManager bind:this={portfolioManager} onchanged={() => portfolioRevision++} onassets={trigger => void assetManager.openList(trigger)} /></div>
+  <div class="menu-slot"><AssetManager bind:this={assetManager} onadded={asset => cashManager.assetAdded(asset)} onchanged={() => void cashManager.refreshAssets()} /><PortfolioManager bind:this={portfolioManager} onchanged={() => portfolioRevision++} onassets={trigger => void assetManager.openList(trigger)} /></div>
 </header>
 <main>
   <span class="eyebrow">Личный учёт инвестиций</span>

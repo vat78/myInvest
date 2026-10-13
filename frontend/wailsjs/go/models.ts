@@ -3,6 +3,7 @@ export namespace desktop {
 	export class AssetDTO {
 	    id: string;
 	    ticker: string;
+	    typeCode: string;
 
 	    static createFrom(source: any = {}) {
 	        return new AssetDTO(source);
@@ -12,6 +13,21 @@ export namespace desktop {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.ticker = source["ticker"];
+	        this.typeCode = source["typeCode"];
+	    }
+	}
+	export class AssetInputDTO {
+	    ticker: string;
+	    typeCode: string;
+
+	    static createFrom(source: any = {}) {
+	        return new AssetInputDTO(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ticker = source["ticker"];
+	        this.typeCode = source["typeCode"];
 	    }
 	}
 	export class AssetResultDTO {
@@ -47,6 +63,34 @@ export namespace desktop {
 		    }
 		    return a;
 		}
+	}
+	export class AssetTypeDTO {
+	    code: string;
+	    name: string;
+
+	    static createFrom(source: any = {}) {
+	        return new AssetTypeDTO(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.code = source["code"];
+	        this.name = source["name"];
+	    }
+	}
+	export class AssetTypeInputDTO {
+	    id: string;
+	    typeCode: string;
+
+	    static createFrom(source: any = {}) {
+	        return new AssetTypeInputDTO(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.typeCode = source["typeCode"];
+	    }
 	}
 	export class CashFlowDTO {
 	    id: string;

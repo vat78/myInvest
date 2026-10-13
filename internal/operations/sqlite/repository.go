@@ -190,7 +190,7 @@ func (r *Repository) Delete(ctx context.Context, pid, id string) error {
 	return r.rebuild(ctx, pid)
 }
 func (r *Repository) ListAssets(ctx context.Context) ([]operations.Asset, error) {
-	rows, err := r.q.QueryContext(ctx, "SELECT id,ticker FROM assets ORDER BY ticker")
+	rows, err := r.q.QueryContext(ctx, "SELECT id,ticker,coalesce(type_code,'') FROM assets ORDER BY ticker")
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +198,7 @@ func (r *Repository) ListAssets(ctx context.Context) ([]operations.Asset, error)
 	out := []operations.Asset{}
 	for rows.Next() {
 		var a operations.Asset
-		if err := rows.Scan(&a.ID, &a.Ticker); err != nil {
+		if err := rows.Scan(&a.ID, &a.Ticker, &a.TypeCode); err != nil {
 			return nil, err
 		}
 		out = append(out, a)
@@ -210,7 +210,7 @@ func (r *Repository) AssetExists(ctx context.Context, id string) (bool, error) {
 	err := r.q.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM assets WHERE id=?)", id).Scan(&found)
 	return found, err
 }
-func (r *Repository) AddAsset(ctx context.Context, ticker string) (operations.Asset, error) {
+func (r *Repository) AddAsset(ctx context.Context, ticker, typeCode string) (operations.Asset, error) {
 	var out operations.Asset
 	var exists bool
 	if err := r.q.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM assets WHERE ticker=?)", ticker).Scan(&exists); err != nil {
@@ -219,7 +219,7 @@ func (r *Repository) AddAsset(ctx context.Context, ticker string) (operations.As
 	if exists {
 		return out, &operations.FieldError{Field: "ticker", Message: "Такой тикер уже существует"}
 	}
-	err := r.q.QueryRowContext(ctx, "INSERT INTO assets(ticker) VALUES (?) RETURNING id,ticker", ticker).Scan(&out.ID, &out.Ticker)
+	err := r.q.QueryRowContext(ctx, "INSERT INTO assets(ticker,type_code) VALUES (?,?) RETURNING id,ticker,type_code", ticker, typeCode).Scan(&out.ID, &out.Ticker, &out.TypeCode)
 	return out, err
 }
 func (r *Repository) rebuild(ctx context.Context, pid string) error {
@@ -280,4 +280,13 @@ func RebuildAll(ctx context.Context, tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
+func (r *Repository) UpdateAssetType(ctx context.Context, id, typeCode string) (operations.Asset, error) {
+	var out operations.Asset
+	err := r.q.QueryRowContext(ctx, "UPDATE assets SET type_code=? WHERE id=? RETURNING id,ticker,type_code", typeCode, id).Scan(&out.ID, &out.Ticker, &out.TypeCode)
+	if errors.Is(err, sql.ErrNoRows) {
+		return out, operations.ErrAssetNotFound
+	}
+	return out, err
 }

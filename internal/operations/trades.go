@@ -9,7 +9,7 @@ import (
 	"unicode"
 )
 
-type Asset struct{ ID, Ticker string }
+type Asset struct{ ID, Ticker, TypeCode string }
 
 func Ticker(value string) (string, error) {
 	value = strings.ToUpper(strings.TrimSpace(value))

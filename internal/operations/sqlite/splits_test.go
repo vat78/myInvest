@@ -19,7 +19,7 @@ func split(a, old, next, date string) operations.Input {
 }
 func TestSplitLifecycleAndPreview(t *testing.T) {
 	store, s, path := setup(t)
-	a, err := s.AddAsset(ctx, "SBER")
+	a, err := s.AddAsset(ctx, "SBER", "stocks")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func TestSplitLifecycleAndPreview(t *testing.T) {
 }
 func TestSplitHistoricalRollback(t *testing.T) {
 	store, s, _ := setup(t)
-	a, _ := s.AddAsset(ctx, "SBER")
+	a, _ := s.AddAsset(ctx, "SBER", "stocks")
 	buy, err := s.Save(ctx, "1", "", trade("buy", a.ID, "1", "1", "0", "2026-01-01"))
 	if err != nil {
 		t.Fatal(err)
@@ -156,7 +156,7 @@ func TestSplitHistoricalRollback(t *testing.T) {
 }
 func TestSplitDeletePurchaseRollback(t *testing.T) {
 	store, s, _ := setup(t)
-	a, _ := s.AddAsset(ctx, "SBER")
+	a, _ := s.AddAsset(ctx, "SBER", "stocks")
 	_, err := s.Save(ctx, "1", "", trade("buy", a.ID, "1", "1", "0", "2026-01-01"))
 	if err != nil {
 		t.Fatal(err)
@@ -178,7 +178,7 @@ func TestSplitDeletePurchaseRollback(t *testing.T) {
 }
 func TestSplitIntegrity(t *testing.T) {
 	store, s, _ := setup(t)
-	a, _ := s.AddAsset(ctx, "SBER")
+	a, _ := s.AddAsset(ctx, "SBER", "stocks")
 	buy, err := s.Save(ctx, "1", "", trade("buy", a.ID, "3", "1", "0", "2026-01-01"))
 	if err != nil {
 		t.Fatal(err)
@@ -237,7 +237,7 @@ func TestSplitIntegrity(t *testing.T) {
 }
 func TestConcurrentSplitWrites(t *testing.T) {
 	store, s, _ := setup(t)
-	a, _ := s.AddAsset(ctx, "SBER")
+	a, _ := s.AddAsset(ctx, "SBER", "stocks")
 	if _, err := s.Save(ctx, "1", "", trade("buy", a.ID, "1", "1", "0", "2026-01-01")); err != nil {
 		t.Fatal(err)
 	}
@@ -338,8 +338,8 @@ func TestSplitMigrationFromTrades(t *testing.T) {
 
 func TestSplitEditingAssetAndPreviewOrder(t *testing.T) {
 	store, s, _ := setup(t)
-	a, _ := s.AddAsset(ctx, "A")
-	b, _ := s.AddAsset(ctx, "B")
+	a, _ := s.AddAsset(ctx, "A", "stocks")
+	b, _ := s.AddAsset(ctx, "B", "stocks")
 	for _, x := range []struct{ a, q string }{{a.ID, "12"}, {b.ID, "5"}} {
 		if _, err := s.Save(ctx, "1", "", trade("buy", x.a, x.q, "1", "0", "2026-01-01")); err != nil {
 			t.Fatal(err)
