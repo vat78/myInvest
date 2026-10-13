@@ -1,4 +1,4 @@
-package cashflow
+package operations
 
 import (
 	"errors"

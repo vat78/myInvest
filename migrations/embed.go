@@ -5,7 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"embed"
-	cashsqlite "myinvest/internal/cashflow/sqlite"
+	operationssqlite "myinvest/internal/operations/sqlite"
 )
 
 //go:embed *.sql
@@ -18,7 +18,7 @@ var Files = bundle{scripts}
 
 func (bundle) AfterMigration(ctx context.Context, version int, tx *sql.Tx) error {
 	if version == 5 {
-		return cashsqlite.RebuildAll(ctx, tx)
+		return operationssqlite.RebuildAll(ctx, tx)
 	}
 	return nil
 }

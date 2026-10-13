@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"myinvest/internal/cashflow"
-	. "myinvest/internal/cashflow/sqlite"
+	"myinvest/internal/operations"
+	. "myinvest/internal/operations/sqlite"
 	storage "myinvest/internal/storage/sqlite"
 	"myinvest/migrations"
 	"path/filepath"
@@ -16,8 +16,8 @@ import (
 	"testing/fstest"
 )
 
-func trade(kind, aid, q, a, e, date string) cashflow.Input {
-	return cashflow.Input{Kind: kind, AssetID: aid, Quantity: q, Amount: a, Expenses: e, Date: date, Comment: "Сделка"}
+func trade(kind, aid, q, a, e, date string) operations.Input {
+	return operations.Input{Kind: kind, AssetID: aid, Quantity: q, Amount: a, Expenses: e, Date: date, Comment: "Сделка"}
 }
 func scalarString(t *testing.T, db *sql.DB, query string, args ...any) string {
 	t.Helper()
@@ -36,7 +36,7 @@ func TestUnifiedTradesAndDailyBalances(t *testing.T) {
 	if _, err = s.AddAsset(ctx, "sBeR"); err == nil {
 		t.Fatal("duplicate ticker")
 	}
-	deposit, err := s.Save(ctx, "1", "", cashflow.Input{Kind: "deposit", Date: "2026-01-01", CurrencyCode: "RUB", Amount: "1000", PortfolioAmount: "1000"})
+	deposit, err := s.Save(ctx, "1", "", operations.Input{Kind: "deposit", Date: "2026-01-01", CurrencyCode: "RUB", Amount: "1000", PortfolioAmount: "1000"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestUnifiedTradesAndDailyBalances(t *testing.T) {
 	if _, err = s.Save(ctx, "2", "", trade("buy", asset.ID, "0.1", "1", "0", "2026-01-01")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.Save(ctx, "2", buy.ID, buy.Input); !errors.Is(err, cashflow.ErrNotFound) {
+	if _, err = s.Save(ctx, "2", buy.ID, buy.Input); !errors.Is(err, operations.ErrNotFound) {
 		t.Fatal(err)
 	}
 	if _, err = s.Save(ctx, "1", deposit.ID, buy.Input); err == nil {
@@ -78,7 +78,7 @@ func TestUnifiedTradesAndDailyBalances(t *testing.T) {
 	if _, err = s.Save(ctx, "1", buy.ID, deposit.Input); err == nil {
 		t.Fatal("trade converted into cash")
 	}
-	for _, in := range []cashflow.Input{trade("buy", "999", "1", "1", "0", "2026-01-01"), trade("buy", asset.ID, "0", "1", "0", "2026-01-01"), trade("buy", asset.ID, "1", "1", "-1", "2026-01-01"), trade("buy", asset.ID, "1", "1", "0", "2026-02-30")} {
+	for _, in := range []operations.Input{trade("buy", "999", "1", "1", "0", "2026-01-01"), trade("buy", asset.ID, "0", "1", "0", "2026-01-01"), trade("buy", asset.ID, "1", "1", "-1", "2026-01-01"), trade("buy", asset.ID, "1", "1", "0", "2026-02-30")} {
 		if _, err = s.Save(ctx, "1", buy.ID, in); err == nil {
 			t.Fatal(in)
 		}
@@ -127,7 +127,7 @@ func TestUnifiedTradesAndDailyBalances(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reopened.Close()
-	s = cashflow.NewService(NewRepository(reopened.DB()))
+	s = operations.NewService(NewRepository(reopened.DB()))
 	snap, err = s.List(ctx, "1")
 	if err != nil || snap.Balance != "-256" || len(snap.Warnings) != 1 {
 		t.Fatal(snap, err)
@@ -207,7 +207,7 @@ func TestAtomicRebuildFailureAndIncompleteRead(t *testing.T) {
 			t.Fatal("rebuild failure committed")
 		}
 	}
-	if _, err = s.Save(ctx, "1", "", cashflow.Input{Kind: "deposit", Date: "2026-01-02", CurrencyCode: "RUB", Amount: "10", PortfolioAmount: "10"}); err == nil {
+	if _, err = s.Save(ctx, "1", "", operations.Input{Kind: "deposit", Date: "2026-01-02", CurrencyCode: "RUB", Amount: "10", PortfolioAmount: "10"}); err == nil {
 		t.Fatal("cash write ignored rebuild failure")
 	}
 	// Add a second operation before injecting a delete rebuild failure.
@@ -275,7 +275,7 @@ func TestMigrationCashHistoryAndDeletedIDs(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer store.Close()
-			s := cashflow.NewService(NewRepository(store.DB()))
+			s := operations.NewService(NewRepository(store.DB()))
 			snap, err := s.List(ctx, "1")
 			if err != nil {
 				t.Fatal(err)
@@ -295,7 +295,7 @@ func TestMigrationCashHistoryAndDeletedIDs(t *testing.T) {
 			if v := scalarString(t, store.DB(), "SELECT count(*) FROM assets"); v != "0" {
 				t.Fatal(v)
 			}
-			op, err := s.Save(ctx, "1", "", cashflow.Input{Kind: "deposit", Date: "2026-01-01", CurrencyCode: "RUB", Amount: "1", PortfolioAmount: "1"})
+			op, err := s.Save(ctx, "1", "", operations.Input{Kind: "deposit", Date: "2026-01-01", CurrencyCode: "RUB", Amount: "1", PortfolioAmount: "1"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -392,7 +392,7 @@ func TestDetailIntegrityAndCascade(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deposit, err := s.Save(ctx, "1", "", cashflow.Input{Kind: "deposit", Date: "2026-01-01", CurrencyCode: "RUB", Amount: "1", PortfolioAmount: "1"})
+	deposit, err := s.Save(ctx, "1", "", operations.Input{Kind: "deposit", Date: "2026-01-01", CurrencyCode: "RUB", Amount: "1", PortfolioAmount: "1"})
 	if err != nil {
 		t.Fatal(err)
 	}

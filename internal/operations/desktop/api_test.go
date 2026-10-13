@@ -3,8 +3,8 @@ package desktop
 import (
 	"context"
 	"errors"
-	"myinvest/internal/cashflow"
-	cashsqlite "myinvest/internal/cashflow/sqlite"
+	"myinvest/internal/operations"
+	operationssqlite "myinvest/internal/operations/sqlite"
 	storage "myinvest/internal/storage/sqlite"
 	"myinvest/migrations"
 	"path/filepath"
@@ -21,8 +21,8 @@ func TestBridge(t *testing.T) {
 	if _, err = store.DB().Exec("INSERT INTO portfolios VALUES (1,'Test','test','2026-01-01','RUB')"); err != nil {
 		t.Fatal(err)
 	}
-	api := NewAPI(func(fn func(*cashflow.Service) error) error {
-		return fn(cashflow.NewService(cashsqlite.NewRepository(store.DB())))
+	api := NewAPI(func(fn func(*operations.Service) error) error {
+		return fn(operations.NewService(operationssqlite.NewRepository(store.DB())))
 	})
 	in := CashFlowInputDTO{Kind: "deposit", Date: "9999-12-31", CurrencyCode: "RUB", Amount: "0,1", PortfolioAmount: "0.100", Comment: "text"}
 	for _, id := range []string{"0", "-1", "01", "1.0", "9223372036854775808"} {
@@ -72,7 +72,7 @@ func TestBridge(t *testing.T) {
 	}
 }
 func TestStorageErrorIsPrivate(t *testing.T) {
-	api := NewAPI(func(func(*cashflow.Service) error) error { return errors.New("SQL private path") })
+	api := NewAPI(func(func(*operations.Service) error) error { return errors.New("SQL private path") })
 	got := api.SaveCashFlow("1", "", CashFlowInputDTO{})
 	if got.Message == "" || strings.Contains(got.Message, "SQL") {
 		t.Fatal(got)
@@ -95,8 +95,8 @@ func TestTradeBridge(t *testing.T) {
 	if _, err = store.DB().Exec("INSERT INTO portfolios VALUES(1,'Test','test','2026-01-01','RUB')"); err != nil {
 		t.Fatal(err)
 	}
-	api := NewAPI(func(fn func(*cashflow.Service) error) error {
-		return fn(cashflow.NewService(cashsqlite.NewRepository(store.DB())))
+	api := NewAPI(func(fn func(*operations.Service) error) error {
+		return fn(operations.NewService(operationssqlite.NewRepository(store.DB())))
 	})
 	asset := api.AddAsset(" sber ")
 	if asset.Message != "" || len(asset.Errors) > 0 || asset.Asset.Ticker != "SBER" {
@@ -161,8 +161,8 @@ func TestSplitBridge(t *testing.T) {
 	if _, err = store.DB().Exec("INSERT INTO portfolios VALUES(1,'Test','test','2026-01-01','RUB')"); err != nil {
 		t.Fatal(err)
 	}
-	api := NewAPI(func(fn func(*cashflow.Service) error) error {
-		return fn(cashflow.NewService(cashsqlite.NewRepository(store.DB())))
+	api := NewAPI(func(fn func(*operations.Service) error) error {
+		return fn(operations.NewService(operationssqlite.NewRepository(store.DB())))
 	})
 	asset := api.AddAsset("SBER").Asset
 	for _, q := range []string{"1", "2"} {
@@ -225,7 +225,7 @@ func TestSplitBridge(t *testing.T) {
 	}
 }
 func TestSplitStorageErrorIsPrivate(t *testing.T) {
-	api := NewAPI(func(func(*cashflow.Service) error) error { return errors.New("SQL private path") })
+	api := NewAPI(func(func(*operations.Service) error) error { return errors.New("SQL private path") })
 	in := SplitInputDTO{Date: "2026-01-01", AssetID: "1", OldUnits: "1", NewUnits: "10"}
 	r := api.SaveSplit("1", "", in)
 	if r.Message == "" || strings.Contains(r.Message, "SQL") {

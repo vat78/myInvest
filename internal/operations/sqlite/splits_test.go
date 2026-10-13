@@ -3,8 +3,8 @@ package sqlite_test
 import (
 	"errors"
 	"io/fs"
-	"myinvest/internal/cashflow"
-	. "myinvest/internal/cashflow/sqlite"
+	"myinvest/internal/operations"
+	. "myinvest/internal/operations/sqlite"
 	storage "myinvest/internal/storage/sqlite"
 	"myinvest/migrations"
 	"path/filepath"
@@ -14,8 +14,8 @@ import (
 	"testing/fstest"
 )
 
-func split(a, old, next, date string) cashflow.Input {
-	return cashflow.Input{Kind: "split", AssetID: a, OldUnits: old, NewUnits: next, Date: date, Comment: "split comment"}
+func split(a, old, next, date string) operations.Input {
+	return operations.Input{Kind: "split", AssetID: a, OldUnits: old, NewUnits: next, Date: date, Comment: "split comment"}
 }
 func TestSplitLifecycleAndPreview(t *testing.T) {
 	store, s, path := setup(t)
@@ -38,7 +38,7 @@ func TestSplitLifecycleAndPreview(t *testing.T) {
 		t.Fatal(err)
 	}
 	preview, err := s.PreviewSplit(ctx, "1", "", split(a.ID, "1", "10", "2026-01-02"))
-	if err != nil || preview != (cashflow.SplitQuantities{Before: "2", After: "20"}) {
+	if err != nil || preview != (operations.SplitQuantities{Before: "2", After: "20"}) {
 		t.Fatal(preview, err)
 	}
 	if scalarString(t, store.DB(), "SELECT count(*) FROM operations") != "4" {
@@ -78,7 +78,7 @@ func TestSplitLifecycleAndPreview(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reopened.Close()
-	s = cashflow.NewService(NewRepository(reopened.DB()))
+	s = operations.NewService(NewRepository(reopened.DB()))
 	again, err := s.List(ctx, "1")
 	if err != nil || !reflect.DeepEqual(snap, again) {
 		t.Fatal(again, err)
@@ -123,7 +123,7 @@ func TestSplitHistoricalRollback(t *testing.T) {
 		func() error { _, e := s.Save(ctx, "1", "", split(a.ID, "3", "1", "2026-01-02")); return e },
 	} {
 		err = mutate()
-		var e *cashflow.SplitError
+		var e *operations.SplitError
 		if !errors.As(err, &e) || e.Ticker != "SBER" {
 			t.Fatal(err)
 		}
@@ -187,15 +187,15 @@ func TestSplitIntegrity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, in := range []cashflow.Input{split("9999", "1", "10", "2026-01-02"), split(a.ID, "1", "1", "2026-01-02"), split(a.ID, "1.5", "10", "2026-01-02"), split(a.ID, "1", "10", "2026-02-30")} {
+	for _, in := range []operations.Input{split("9999", "1", "10", "2026-01-02"), split(a.ID, "1", "1", "2026-01-02"), split(a.ID, "1.5", "10", "2026-01-02"), split(a.ID, "1", "10", "2026-02-30")} {
 		if _, err = s.Save(ctx, "1", op.ID, in); err == nil {
 			t.Fatal(in)
 		}
 	}
-	if _, err = s.Save(ctx, "2", op.ID, op.Input); !errors.Is(err, cashflow.ErrNotFound) {
+	if _, err = s.Save(ctx, "2", op.ID, op.Input); !errors.Is(err, operations.ErrNotFound) {
 		t.Fatal(err)
 	}
-	if _, err = s.Save(ctx, "999", "", op.Input); !errors.Is(err, cashflow.ErrPortfolio) {
+	if _, err = s.Save(ctx, "999", "", op.Input); !errors.Is(err, operations.ErrPortfolio) {
 		t.Fatal(err)
 	}
 	if _, err = s.Save(ctx, "1", buy.ID, op.Input); err == nil {
@@ -320,7 +320,7 @@ func TestSplitMigrationFromTrades(t *testing.T) {
 				}
 				return
 			}
-			s := cashflow.NewService(NewRepository(store.DB()))
+			s := operations.NewService(NewRepository(store.DB()))
 			snap, err := s.List(ctx, "1")
 			if err != nil || snap.Balance != "75" || snap.Operations[0].ID != "2" {
 				t.Fatal(snap, err)
@@ -402,7 +402,7 @@ func TestSplitEditingAssetAndPreviewOrder(t *testing.T) {
 	if _, err = s.PreviewSplit(ctx, "1", sale.ID, split(b.ID, "1", "10", "2026-01-02")); err == nil {
 		t.Fatal("trade previewed as split")
 	}
-	if _, err = s.PreviewSplit(ctx, "1", "9999", split(b.ID, "1", "10", "2026-01-02")); !errors.Is(err, cashflow.ErrNotFound) {
+	if _, err = s.PreviewSplit(ctx, "1", "9999", split(b.ID, "1", "10", "2026-01-02")); !errors.Is(err, operations.ErrNotFound) {
 		t.Fatal(err)
 	}
 }

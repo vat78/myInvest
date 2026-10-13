@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"myinvest/internal/cashflow"
+	"myinvest/internal/operations"
 )
 
 type querier interface {
@@ -19,7 +19,7 @@ type Repository struct {
 }
 
 func NewRepository(db *sql.DB) *Repository { return &Repository{db: db, q: db} }
-func (r *Repository) Transaction(ctx context.Context, fn func(cashflow.Repository) error) error {
+func (r *Repository) Transaction(ctx context.Context, fn func(operations.Repository) error) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -39,7 +39,7 @@ func (r *Repository) PortfolioCurrency(ctx context.Context, id string) (string, 
 	var code string
 	err := r.q.QueryRowContext(ctx, "SELECT currency_code FROM portfolios WHERE id=?", id).Scan(&code)
 	if errors.Is(err, sql.ErrNoRows) {
-		err = cashflow.ErrPortfolio
+		err = operations.ErrPortfolio
 	}
 	return code, err
 }
@@ -71,12 +71,12 @@ func (r *Repository) selection() string {
 	return columns + joins
 }
 
-func scan(row interface{ Scan(...any) error }) (cashflow.Operation, error) {
-	var o cashflow.Operation
+func scan(row interface{ Scan(...any) error }) (operations.Operation, error) {
+	var o operations.Operation
 	var cashID, tradeID, splitID sql.NullString
 	err := row.Scan(&o.ID, &o.PortfolioID, &o.Kind, &o.Date, &o.Comment, &o.CurrencyCode, &o.Amount, &o.PortfolioAmount, &o.AssetID, &o.Quantity, &o.Expenses, &o.AveragePrice, &o.Ticker, &cashID, &tradeID, &o.OldUnits, &o.NewUnits, &splitID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return o, cashflow.ErrNotFound
+		return o, operations.ErrNotFound
 	}
 	if err != nil {
 		return o, err
@@ -85,21 +85,21 @@ func scan(row interface{ Scan(...any) error }) (cashflow.Operation, error) {
 		if !splitID.Valid || cashID.Valid || tradeID.Valid || o.Ticker == "" {
 			return o, errors.New("incomplete split details")
 		}
-		in, err := cashflow.ValidateSplit(o.Input)
+		in, err := operations.ValidateSplit(o.Input)
 		if err != nil {
 			return o, err
 		}
 		o.Input = in
-	} else if cashflow.IsTrade(o.Kind) {
+	} else if operations.IsTrade(o.Kind) {
 		if !tradeID.Valid || cashID.Valid || splitID.Valid || o.Ticker == "" {
 			return o, errors.New("incomplete trade details")
 		}
-		in, err := cashflow.ValidateTrade(o.Input)
+		in, err := operations.ValidateTrade(o.Input)
 		if err != nil {
 			return o, err
 		}
 		o.Input = in
-		price, rounded, err := cashflow.AveragePrice(o.Amount, o.Quantity)
+		price, rounded, err := operations.AveragePrice(o.Amount, o.Quantity)
 		if err != nil {
 			return o, err
 		}
@@ -111,22 +111,22 @@ func scan(row interface{ Scan(...any) error }) (cashflow.Operation, error) {
 		if !cashID.Valid || tradeID.Valid || splitID.Valid || (o.Kind != "deposit" && o.Kind != "withdrawal") {
 			return o, errors.New("incomplete cash details")
 		}
-		if _, err := cashflow.Amount(o.Amount); err != nil {
+		if _, err := operations.Amount(o.Amount); err != nil {
 			return o, err
 		}
-		if _, err := cashflow.Amount(o.PortfolioAmount); err != nil {
+		if _, err := operations.Amount(o.PortfolioAmount); err != nil {
 			return o, err
 		}
 	}
 	return o, nil
 }
-func (r *Repository) List(ctx context.Context, pid string) ([]cashflow.Operation, error) {
+func (r *Repository) List(ctx context.Context, pid string) ([]operations.Operation, error) {
 	rows, err := r.q.QueryContext(ctx, "SELECT "+r.selection()+"WHERE o.portfolio_id=? ORDER BY o.date DESC,CASE WHEN o.kind='split' THEN 0 ELSE 1 END,o.id DESC", pid)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := []cashflow.Operation{}
+	out := []operations.Operation{}
 	for rows.Next() {
 		o, err := scan(rows)
 		if err != nil {
@@ -136,10 +136,10 @@ func (r *Repository) List(ctx context.Context, pid string) ([]cashflow.Operation
 	}
 	return out, rows.Err()
 }
-func (r *Repository) Find(ctx context.Context, pid, id string) (cashflow.Operation, error) {
+func (r *Repository) Find(ctx context.Context, pid, id string) (operations.Operation, error) {
 	return scan(r.q.QueryRowContext(ctx, "SELECT "+r.selection()+"WHERE o.portfolio_id=? AND o.id=?", pid, id))
 }
-func (r *Repository) Save(ctx context.Context, o cashflow.Operation) (cashflow.Operation, error) {
+func (r *Repository) Save(ctx context.Context, o operations.Operation) (operations.Operation, error) {
 	var err error
 	if o.ID == "" {
 		err = r.q.QueryRowContext(ctx, "INSERT INTO operations(portfolio_id,kind,date,comment) VALUES (?,?,?,?) RETURNING id", o.PortfolioID, o.Kind, o.Date, o.Comment).Scan(&o.ID)
@@ -150,7 +150,7 @@ func (r *Repository) Save(ctx context.Context, o cashflow.Operation) (cashflow.O
 			n, e := res.RowsAffected()
 			err = e
 			if n == 0 {
-				err = cashflow.ErrNotFound
+				err = operations.ErrNotFound
 			}
 		}
 	}
@@ -160,7 +160,7 @@ func (r *Repository) Save(ctx context.Context, o cashflow.Operation) (cashflow.O
 	if o.Kind == "split" {
 		_, err = r.q.ExecContext(ctx, `INSERT INTO split_details(operation_id,asset_id,old_units,new_units) VALUES (?,?,?,?)
  ON CONFLICT(operation_id) DO UPDATE SET asset_id=excluded.asset_id,old_units=excluded.old_units,new_units=excluded.new_units`, o.ID, o.AssetID, o.OldUnits, o.NewUnits)
-	} else if cashflow.IsTrade(o.Kind) {
+	} else if operations.IsTrade(o.Kind) {
 		_, err = r.q.ExecContext(ctx, `INSERT INTO trade_details(operation_id,asset_id,quantity,amount,expenses,average_price) VALUES (?,?,?,?,?,?)
   ON CONFLICT(operation_id) DO UPDATE SET asset_id=excluded.asset_id,quantity=excluded.quantity,amount=excluded.amount,expenses=excluded.expenses,average_price=excluded.average_price`, o.ID, o.AssetID, o.Quantity, o.Amount, o.Expenses, o.AveragePrice)
 	} else {
@@ -185,19 +185,19 @@ func (r *Repository) Delete(ctx context.Context, pid, id string) error {
 		return err
 	}
 	if n == 0 {
-		return cashflow.ErrNotFound
+		return operations.ErrNotFound
 	}
 	return r.rebuild(ctx, pid)
 }
-func (r *Repository) ListAssets(ctx context.Context) ([]cashflow.Asset, error) {
+func (r *Repository) ListAssets(ctx context.Context) ([]operations.Asset, error) {
 	rows, err := r.q.QueryContext(ctx, "SELECT id,ticker FROM assets ORDER BY ticker")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := []cashflow.Asset{}
+	out := []operations.Asset{}
 	for rows.Next() {
-		var a cashflow.Asset
+		var a operations.Asset
 		if err := rows.Scan(&a.ID, &a.Ticker); err != nil {
 			return nil, err
 		}
@@ -210,14 +210,14 @@ func (r *Repository) AssetExists(ctx context.Context, id string) (bool, error) {
 	err := r.q.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM assets WHERE id=?)", id).Scan(&found)
 	return found, err
 }
-func (r *Repository) AddAsset(ctx context.Context, ticker string) (cashflow.Asset, error) {
-	var out cashflow.Asset
+func (r *Repository) AddAsset(ctx context.Context, ticker string) (operations.Asset, error) {
+	var out operations.Asset
 	var exists bool
 	if err := r.q.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM assets WHERE ticker=?)", ticker).Scan(&exists); err != nil {
 		return out, err
 	}
 	if exists {
-		return out, &cashflow.FieldError{Field: "ticker", Message: "Такой тикер уже существует"}
+		return out, &operations.FieldError{Field: "ticker", Message: "Такой тикер уже существует"}
 	}
 	err := r.q.QueryRowContext(ctx, "INSERT INTO assets(ticker) VALUES (?) RETURNING id,ticker", ticker).Scan(&out.ID, &out.Ticker)
 	return out, err
@@ -227,7 +227,7 @@ func (r *Repository) rebuild(ctx context.Context, pid string) error {
 	if err != nil {
 		return err
 	}
-	history, err := cashflow.Rebuild(ops)
+	history, err := operations.Rebuild(ops)
 	if err != nil {
 		return err
 	}
