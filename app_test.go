@@ -82,3 +82,26 @@ func TestBoundAPIsFollowStorageLifecycle(t *testing.T) {
 		t.Fatal("bound API accepted closed storage")
 	}
 }
+
+func TestPortfolioAPIFollowsStorageLifecycle(t *testing.T) {
+	t.Setenv("MYINVEST_DATA_DIR", t.TempDir())
+	app := newApp()
+	result := make(chan error, 1)
+	go func() { _, err := app.portfolios.ListPortfolios(); result <- err }()
+	if err := app.initialize(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	defer app.shutdown(context.Background())
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("portfolio API did not become ready")
+	}
+	app.shutdown(context.Background())
+	if _, err := app.portfolios.ListPortfolios(); err == nil {
+		t.Fatal("portfolio API accepted closed storage")
+	}
+}
