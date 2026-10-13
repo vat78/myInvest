@@ -65,6 +65,11 @@ export namespace desktop {
 	    averagePrice: string;
 	    rounded: boolean;
 	    moneyChange: string;
+	    oldUnits: string;
+	    newUnits: string;
+	    quantityBefore: string;
+	    quantityAfter: string;
+	    reverseSplit: boolean;
 
 	    static createFrom(source: any = {}) {
 	        return new CashFlowDTO(source);
@@ -88,6 +93,11 @@ export namespace desktop {
 	        this.averagePrice = source["averagePrice"];
 	        this.rounded = source["rounded"];
 	        this.moneyChange = source["moneyChange"];
+	        this.oldUnits = source["oldUnits"];
+	        this.newUnits = source["newUnits"];
+	        this.quantityBefore = source["quantityBefore"];
+	        this.quantityAfter = source["quantityAfter"];
+	        this.reverseSplit = source["reverseSplit"];
 	    }
 	}
 	export class CashFlowInputDTO {
@@ -332,6 +342,44 @@ export namespace desktop {
 		    }
 		    return a;
 		}
+	}
+	export class SplitInputDTO {
+	    date: string;
+	    assetID: string;
+	    oldUnits: string;
+	    newUnits: string;
+	    comment: string;
+
+	    static createFrom(source: any = {}) {
+	        return new SplitInputDTO(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.date = source["date"];
+	        this.assetID = source["assetID"];
+	        this.oldUnits = source["oldUnits"];
+	        this.newUnits = source["newUnits"];
+	        this.comment = source["comment"];
+	    }
+	}
+	export class SplitPreviewDTO {
+	    quantityBefore: string;
+	    quantityAfter: string;
+	    errors: Record<string, string>;
+	    message: string;
+
+	    static createFrom(source: any = {}) {
+	        return new SplitPreviewDTO(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.quantityBefore = source["quantityBefore"];
+	        this.quantityAfter = source["quantityAfter"];
+	        this.errors = source["errors"];
+	        this.message = source["message"];
+	    }
 	}
 	export class TradeInputDTO {
 	    kind: string;

@@ -77,6 +77,9 @@ func AveragePrice(amount, quantity string) (string, bool, error) {
 	return exact(new(big.Rat).SetFrac(rounded, scale)), changed, nil
 }
 func MoneyChange(op Operation) string {
+	if op.Kind == "split" {
+		return "0"
+	}
 	if IsTrade(op.Kind) {
 		v := rational(op.Amount)
 		e := rational(op.Expenses)
@@ -107,9 +110,10 @@ type History struct {
 	Days         []Day
 	Warnings     []Warning
 	CashWarnings []CashWarning
+	Splits       map[string]SplitQuantities
 }
 
-// Rebuild consumes a single portfolio, using calendar date then numeric ID.
+// Rebuild consumes a single portfolio, with splits first within each date, then numeric ID.
 // Every end-of-day snapshot includes all assets encountered so far, even zeroes.
 func Rebuild(operations []Operation) (History, error) {
 	ops := append([]Operation(nil), operations...)
@@ -117,15 +121,35 @@ func Rebuild(operations []Operation) (History, error) {
 		if ops[i].Date != ops[j].Date {
 			return ops[i].Date < ops[j].Date
 		}
+		if (ops[i].Kind == "split") != (ops[j].Kind == "split") {
+			return ops[i].Kind == "split"
+		}
 		a, ok := new(big.Int).SetString(ops[i].ID, 10)
 		b, ok2 := new(big.Int).SetString(ops[j].ID, 10)
 		return ok && ok2 && a.Cmp(b) < 0
 	})
-	out := History{Balance: "0", Days: []Day{}, Warnings: []Warning{}}
+	out := History{Balance: "0", Days: []Day{}, Warnings: []Warning{}, Splits: map[string]SplitQuantities{}}
 	cash := new(big.Rat)
 	positions := map[string]*big.Rat{}
 	for i, op := range ops {
-		if IsTrade(op.Kind) {
+		if op.Kind == "split" {
+			in, err := ValidateSplit(op.Input)
+			if err != nil {
+				return out, err
+			}
+			v := positions[in.AssetID]
+			if v == nil {
+				v = new(big.Rat)
+				positions[in.AssetID] = v
+			}
+			before := exact(v)
+			after, err := SplitQuantity(before, in.OldUnits, in.NewUnits)
+			if err != nil {
+				return out, &SplitError{op.Ticker, op.Date, in.OldUnits, in.NewUnits}
+			}
+			v.Set(rational(after))
+			out.Splits[op.ID] = SplitQuantities{before, after}
+		} else if IsTrade(op.Kind) {
 			normalized, err := ValidateTrade(op.Input)
 			if err != nil {
 				return out, err

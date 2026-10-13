@@ -20,14 +20,19 @@ type CashFlowDTO struct {
 	ID          string `json:"id"`
 	PortfolioID string `json:"portfolioID"`
 	CashFlowInputDTO
-	Rate         string `json:"rate"`
-	AssetID      string `json:"assetID"`
-	Ticker       string `json:"ticker"`
-	Quantity     string `json:"quantity"`
-	Expenses     string `json:"expenses"`
-	AveragePrice string `json:"averagePrice"`
-	Rounded      bool   `json:"rounded"`
-	MoneyChange  string `json:"moneyChange"`
+	Rate           string `json:"rate"`
+	AssetID        string `json:"assetID"`
+	Ticker         string `json:"ticker"`
+	Quantity       string `json:"quantity"`
+	Expenses       string `json:"expenses"`
+	AveragePrice   string `json:"averagePrice"`
+	Rounded        bool   `json:"rounded"`
+	MoneyChange    string `json:"moneyChange"`
+	OldUnits       string `json:"oldUnits"`
+	NewUnits       string `json:"newUnits"`
+	QuantityBefore string `json:"quantityBefore"`
+	QuantityAfter  string `json:"quantityAfter"`
+	ReverseSplit   bool   `json:"reverseSplit"`
 }
 type CashSnapshotDTO struct {
 	CurrencyCode string           `json:"currencyCode"`
@@ -76,13 +81,13 @@ func (a *CashFlowAPI) ListCashFlows(pid string) (CashSnapshotDTO, error) {
 		for _, o := range snapshot.Operations {
 			rate := ""
 			var err error
-			if !cashflow.IsTrade(o.Kind) {
+			if !cashflow.IsTrade(o.Kind) && o.Kind != "split" {
 				rate, err = cashflow.Rate(o.Amount, o.PortfolioAmount)
 			}
 			if err != nil {
 				return err
 			}
-			out.Operations = append(out.Operations, CashFlowDTO{ID: o.ID, PortfolioID: o.PortfolioID, CashFlowInputDTO: CashFlowInputDTO{o.Kind, o.Date, o.CurrencyCode, o.Amount, o.PortfolioAmount, o.Comment}, Rate: rate, AssetID: o.AssetID, Ticker: o.Ticker, Quantity: o.Quantity, Expenses: o.Expenses, AveragePrice: o.AveragePrice, Rounded: o.Rounded, MoneyChange: cashflow.MoneyChange(o)})
+			out.Operations = append(out.Operations, CashFlowDTO{ID: o.ID, PortfolioID: o.PortfolioID, CashFlowInputDTO: CashFlowInputDTO{o.Kind, o.Date, o.CurrencyCode, o.Amount, o.PortfolioAmount, o.Comment}, Rate: rate, AssetID: o.AssetID, Ticker: o.Ticker, Quantity: o.Quantity, Expenses: o.Expenses, AveragePrice: o.AveragePrice, Rounded: o.Rounded, MoneyChange: cashflow.MoneyChange(o), OldUnits: o.OldUnits, NewUnits: o.NewUnits, QuantityBefore: o.QuantityBefore, QuantityAfter: o.QuantityAfter, ReverseSplit: cashflow.IsReverseSplit(o)})
 		}
 		return nil
 	})
@@ -93,9 +98,12 @@ func (a *CashFlowAPI) ListCashFlows(pid string) (CashSnapshotDTO, error) {
 }
 func result(err error) CashResultDTO {
 	out := CashResultDTO{Errors: map[string]string{}}
+	var split *cashflow.SplitError
 	var field *cashflow.FieldError
 	if errors.As(err, &field) {
 		out.Errors[field.Field] = field.Message
+	} else if errors.As(err, &split) {
+		out.Message = split.Error()
 	} else if errors.Is(err, cashflow.ErrPortfolio) || errors.Is(err, cashflow.ErrNotFound) {
 		out.Message = err.Error()
 	} else if err != nil {
@@ -234,4 +242,56 @@ func (a *CashFlowAPI) PreviewTrade(kind, quantity, amount, expenses string) Trad
 type CashWarningDTO struct {
 	Date    string `json:"date"`
 	Balance string `json:"balance"`
+}
+
+type SplitInputDTO struct {
+	Date     string `json:"date"`
+	AssetID  string `json:"assetID"`
+	OldUnits string `json:"oldUnits"`
+	NewUnits string `json:"newUnits"`
+	Comment  string `json:"comment"`
+}
+type SplitPreviewDTO struct {
+	QuantityBefore string            `json:"quantityBefore"`
+	QuantityAfter  string            `json:"quantityAfter"`
+	Errors         map[string]string `json:"errors"`
+	Message        string            `json:"message"`
+}
+
+func splitInput(in SplitInputDTO) cashflow.Input {
+	return cashflow.Input{Kind: "split", Date: in.Date, AssetID: in.AssetID, OldUnits: in.OldUnits, NewUnits: in.NewUnits, Comment: in.Comment}
+}
+func splitIDs(pid, id string, in SplitInputDTO) error {
+	if !validID(pid) {
+		return cashflow.ErrPortfolio
+	}
+	if id != "" && !validID(id) {
+		return cashflow.ErrNotFound
+	}
+	if !validID(in.AssetID) {
+		return &cashflow.FieldError{Field: "assetID", Message: "Выберите актив"}
+	}
+	return nil
+}
+func (a *CashFlowAPI) SaveSplit(pid, id string, in SplitInputDTO) CashResultDTO {
+	if err := splitIDs(pid, id, in); err != nil {
+		return result(err)
+	}
+	return result(a.useService(func(s *cashflow.Service) error {
+		_, err := s.Save(context.Background(), pid, id, splitInput(in))
+		return err
+	}))
+}
+func (a *CashFlowAPI) PreviewSplit(pid, id string, in SplitInputDTO) SplitPreviewDTO {
+	var q cashflow.SplitQuantities
+	err := splitIDs(pid, id, in)
+	if err == nil {
+		err = a.useService(func(s *cashflow.Service) error {
+			var err error
+			q, err = s.PreviewSplit(context.Background(), pid, id, splitInput(in))
+			return err
+		})
+	}
+	r := result(err)
+	return SplitPreviewDTO{q.Before, q.After, r.Errors, r.Message}
 }
