@@ -7,12 +7,12 @@ import (
 	"sync"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
-	"myinvest/internal/cashflow"
-	cashdesktop "myinvest/internal/cashflow/desktop"
-	cashsqlite "myinvest/internal/cashflow/sqlite"
 	"myinvest/internal/currency"
 	"myinvest/internal/currency/desktop"
 	currencysqlite "myinvest/internal/currency/sqlite"
+	"myinvest/internal/operations"
+	operationsdesktop "myinvest/internal/operations/desktop"
+	operationssqlite "myinvest/internal/operations/sqlite"
 	"myinvest/internal/portfolio"
 	portfoliodesktop "myinvest/internal/portfolio/desktop"
 	portfoliosqlite "myinvest/internal/portfolio/sqlite"
@@ -21,7 +21,7 @@ import (
 )
 
 type App struct {
-	cashFlows  *cashdesktop.CashFlowAPI
+	cashFlows  *operationsdesktop.CashFlowAPI
 	ready      chan struct{}
 	mu         sync.Mutex
 	store      *sqlite.Store
@@ -44,8 +44,8 @@ func newApp() *App {
 	a.portfolios = portfoliodesktop.NewAPI(func(fn func(*portfolio.Service) error) error {
 		return a.withStorage(func(db *sql.DB) error { return fn(portfolio.NewService(portfoliosqlite.NewRepository(db))) })
 	})
-	a.cashFlows = cashdesktop.NewAPI(func(fn func(*cashflow.Service) error) error {
-		return a.withStorage(func(db *sql.DB) error { return fn(cashflow.NewService(cashsqlite.NewRepository(db))) })
+	a.cashFlows = operationsdesktop.NewAPI(func(fn func(*operations.Service) error) error {
+		return a.withStorage(func(db *sql.DB) error { return fn(operations.NewService(operationssqlite.NewRepository(db))) })
 	})
 	return a
 }

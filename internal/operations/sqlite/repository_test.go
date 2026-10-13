@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"io/fs"
-	"myinvest/internal/cashflow"
-	. "myinvest/internal/cashflow/sqlite"
+	"myinvest/internal/operations"
+	. "myinvest/internal/operations/sqlite"
 	storage "myinvest/internal/storage/sqlite"
 	"myinvest/migrations"
 	"path/filepath"
@@ -15,7 +15,7 @@ import (
 
 var ctx = context.Background()
 
-func setup(t *testing.T) (*storage.Store, *cashflow.Service, string) {
+func setup(t *testing.T) (*storage.Store, *operations.Service, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "db.sqlite3")
 	store, err := storage.Open(ctx, path, migrations.Files)
@@ -26,10 +26,10 @@ func setup(t *testing.T) (*storage.Store, *cashflow.Service, string) {
 	if _, err = store.DB().Exec("INSERT INTO portfolios(id,name,name_key,opened_on,currency_code) VALUES (1,'Первый','первый','2026-01-01','RUB'),(2,'Второй','второй','2026-01-01','USD')"); err != nil {
 		t.Fatal(err)
 	}
-	return store, cashflow.NewService(NewRepository(store.DB())), path
+	return store, operations.NewService(NewRepository(store.DB())), path
 }
-func input(kind, a, b string) cashflow.Input {
-	return cashflow.Input{Kind: kind, Date: "2026-01-01", CurrencyCode: "USD", Amount: a, PortfolioAmount: b, Comment: "С удержаниями\nточно"}
+func input(kind, a, b string) operations.Input {
+	return operations.Input{Kind: kind, Date: "2026-01-01", CurrencyCode: "USD", Amount: a, PortfolioAmount: b, Comment: "С удержаниями\nточно"}
 }
 func TestLifecycleAndIndependence(t *testing.T) {
 	store, s, path := setup(t)
@@ -60,7 +60,7 @@ func TestLifecycleAndIndependence(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reopened.Close()
-	s = cashflow.NewService(NewRepository(reopened.DB()))
+	s = operations.NewService(NewRepository(reopened.DB()))
 	snapshot, err = s.List(ctx, "1")
 	if err != nil || snapshot.Balance != "46500" || snapshot.Operations[1].Comment != d.Comment || snapshot.Operations[1].Date != d.Date || snapshot.Operations[0].Amount != "500" {
 		t.Fatal(snapshot, err)
@@ -76,10 +76,10 @@ func TestLifecycleAndIndependence(t *testing.T) {
 	if other.Balance != "0" || len(other.Operations) != 0 {
 		t.Fatal(other)
 	}
-	if _, err = s.Save(ctx, "2", d.ID, input("deposit", "1", "1")); !errors.Is(err, cashflow.ErrNotFound) {
+	if _, err = s.Save(ctx, "2", d.ID, input("deposit", "1", "1")); !errors.Is(err, operations.ErrNotFound) {
 		t.Fatal("moved operation", err)
 	}
-	if err = s.Delete(ctx, "2", d.ID); !errors.Is(err, cashflow.ErrNotFound) {
+	if err = s.Delete(ctx, "2", d.ID); !errors.Is(err, operations.ErrNotFound) {
 		t.Fatal("deleted other portfolio", err)
 	}
 	edited, err := s.Save(ctx, "1", d.ID, input("deposit", "2", "0.1"))
@@ -115,17 +115,17 @@ func TestInvalidAndFailedWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, change := range []func(*cashflow.Input){func(in *cashflow.Input) { in.Kind = "other" }, func(in *cashflow.Input) { in.Date = "2026-02-30" }, func(in *cashflow.Input) { in.CurrencyCode = "EUR" }, func(in *cashflow.Input) { in.Amount = "-1" }, func(in *cashflow.Input) { in.PortfolioAmount = "0" }, func(in *cashflow.Input) { in.CurrencyCode = "RUB" }} {
+	for _, change := range []func(*operations.Input){func(in *operations.Input) { in.Kind = "other" }, func(in *operations.Input) { in.Date = "2026-02-30" }, func(in *operations.Input) { in.CurrencyCode = "EUR" }, func(in *operations.Input) { in.Amount = "-1" }, func(in *operations.Input) { in.PortfolioAmount = "0" }, func(in *operations.Input) { in.CurrencyCode = "RUB" }} {
 		in := input("deposit", "1", "2")
 		change(&in)
 		if _, err = s.Save(ctx, "1", valid.ID, in); err == nil {
 			t.Fatal("accepted invalid", in)
 		}
 	}
-	if _, err = s.Save(ctx, "99", "", input("deposit", "1", "2")); !errors.Is(err, cashflow.ErrPortfolio) {
+	if _, err = s.Save(ctx, "99", "", input("deposit", "1", "2")); !errors.Is(err, operations.ErrPortfolio) {
 		t.Fatal(err)
 	}
-	if _, err = s.Save(ctx, "1", "99", input("deposit", "1", "2")); !errors.Is(err, cashflow.ErrNotFound) {
+	if _, err = s.Save(ctx, "1", "99", input("deposit", "1", "2")); !errors.Is(err, operations.ErrNotFound) {
 		t.Fatal(err)
 	}
 	if _, err = store.DB().Exec("CREATE TRIGGER reject_write BEFORE UPDATE ON operations BEGIN SELECT RAISE(ABORT,'private SQL details'); END"); err != nil {
@@ -146,8 +146,8 @@ func TestInvalidAndFailedWrites(t *testing.T) {
 	}
 	// A failure after a successful write must roll back the whole transaction.
 	r := NewRepository(store.DB())
-	err = r.Transaction(ctx, func(tx cashflow.Repository) error {
-		if _, err := tx.Save(ctx, cashflow.Operation{PortfolioID: "1", Input: input("deposit", "3", "4")}); err != nil {
+	err = r.Transaction(ctx, func(tx operations.Repository) error {
+		if _, err := tx.Save(ctx, operations.Operation{PortfolioID: "1", Input: input("deposit", "3", "4")}); err != nil {
 			return err
 		}
 		return errors.New("abort")
