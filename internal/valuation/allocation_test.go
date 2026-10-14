@@ -228,3 +228,16 @@ func TestAllocationExactPurchasePrice(t *testing.T) {
 		})
 	}
 }
+
+func TestDividendsIncreaseAllocationCash(t *testing.T) {
+	s := allocationFixture("1200")
+	before, err := BuildAllocation(s, "1", "2026-10-14")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Analysis.Operations = append(s.Analysis.Operations, operations.Operation{ID: "4", PortfolioID: "1", Input: operations.Input{Kind: "dividend", Date: "2026-01-03", Amount: "0.3", PortfolioAmount: "0.3"}})
+	after, err := BuildAllocation(s, "1", "2026-10-14")
+	if err != nil || before.Cash != "300" || after.Cash != "300.3" {
+		t.Fatal(before, after, err)
+	}
+}

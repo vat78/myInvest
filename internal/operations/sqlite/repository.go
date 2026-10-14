@@ -13,9 +13,10 @@ type querier interface {
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
 }
 type Repository struct {
-	db           *sql.DB
-	q            querier
-	legacySchema bool
+	db                *sql.DB
+	q                 querier
+	legacySchema      bool
+	preDividendSchema bool
 }
 
 func NewRepository(db *sql.DB) *Repository { return &Repository{db: db, q: db} }
@@ -56,32 +57,55 @@ const legacyColumns = `o.id,o.portfolio_id,o.kind,o.date,o.comment,
 const legacyJoins = ` FROM operations o LEFT JOIN cash_flow_details c ON c.operation_id=o.id
  LEFT JOIN trade_details t ON t.operation_id=o.id LEFT JOIN assets a ON a.id=t.asset_id `
 
-const columns = `o.id,o.portfolio_id,o.kind,o.date,o.comment,
+const splitColumns = `o.id,o.portfolio_id,o.kind,o.date,o.comment,
  coalesce(c.currency_code,''),coalesce(c.amount,t.amount,''),coalesce(c.portfolio_amount,''),
  coalesce(t.asset_id,s.asset_id,''),coalesce(t.quantity,''),coalesce(t.expenses,''),coalesce(t.average_price,''),coalesce(a.ticker,''),
  c.operation_id,t.operation_id,coalesce(s.old_units,''),coalesce(s.new_units,''),s.operation_id`
-const joins = ` FROM operations o LEFT JOIN cash_flow_details c ON c.operation_id=o.id
+const splitJoins = ` FROM operations o LEFT JOIN cash_flow_details c ON c.operation_id=o.id
  LEFT JOIN trade_details t ON t.operation_id=o.id LEFT JOIN split_details s ON s.operation_id=o.id
  LEFT JOIN assets a ON a.id=coalesce(t.asset_id,s.asset_id) `
 
+const columns = `o.id,o.portfolio_id,o.kind,o.date,o.comment,
+ coalesce(c.currency_code,''),coalesce(c.amount,t.amount,d.amount,''),coalesce(c.portfolio_amount,d.amount,''),
+ coalesce(t.asset_id,s.asset_id,d.asset_id,''),coalesce(t.quantity,''),coalesce(t.expenses,''),coalesce(t.average_price,''),coalesce(a.ticker,''),
+ c.operation_id,t.operation_id,coalesce(s.old_units,''),coalesce(s.new_units,''),s.operation_id,d.operation_id`
+const joins = ` FROM operations o LEFT JOIN cash_flow_details c ON c.operation_id=o.id
+ LEFT JOIN trade_details t ON t.operation_id=o.id LEFT JOIN split_details s ON s.operation_id=o.id
+ LEFT JOIN dividend_details d ON d.operation_id=o.id
+ LEFT JOIN assets a ON a.id=coalesce(t.asset_id,s.asset_id,d.asset_id) `
+
 func (r *Repository) selection() string {
 	if r.legacySchema {
-		return legacyColumns + ",'','',NULL" + legacyJoins
+		return legacyColumns + ",'','',NULL,NULL" + legacyJoins
+	}
+	if r.preDividendSchema {
+		return splitColumns + ",NULL" + splitJoins
 	}
 	return columns + joins
 }
 
 func scan(row interface{ Scan(...any) error }) (operations.Operation, error) {
 	var o operations.Operation
-	var cashID, tradeID, splitID sql.NullString
-	err := row.Scan(&o.ID, &o.PortfolioID, &o.Kind, &o.Date, &o.Comment, &o.CurrencyCode, &o.Amount, &o.PortfolioAmount, &o.AssetID, &o.Quantity, &o.Expenses, &o.AveragePrice, &o.Ticker, &cashID, &tradeID, &o.OldUnits, &o.NewUnits, &splitID)
+	var cashID, tradeID, splitID, dividendID sql.NullString
+	err := row.Scan(&o.ID, &o.PortfolioID, &o.Kind, &o.Date, &o.Comment, &o.CurrencyCode, &o.Amount, &o.PortfolioAmount, &o.AssetID, &o.Quantity, &o.Expenses, &o.AveragePrice, &o.Ticker, &cashID, &tradeID, &o.OldUnits, &o.NewUnits, &splitID, &dividendID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return o, operations.ErrNotFound
 	}
 	if err != nil {
 		return o, err
 	}
-	if o.Kind == "split" {
+	if o.Kind == "dividend" {
+		if !dividendID.Valid || cashID.Valid || tradeID.Valid || splitID.Valid || (o.AssetID != "" && o.Ticker == "") {
+			return o, errors.New("incomplete dividend details")
+		}
+		in, err := operations.ValidateDividend(o.Input)
+		if err != nil {
+			return o, err
+		}
+		o.Input = in
+	} else if dividendID.Valid {
+		return o, errors.New("operation detail kind mismatch")
+	} else if o.Kind == "split" {
 		if !splitID.Valid || cashID.Valid || tradeID.Valid || o.Ticker == "" {
 			return o, errors.New("incomplete split details")
 		}
@@ -157,7 +181,14 @@ func (r *Repository) Save(ctx context.Context, o operations.Operation) (operatio
 	if err != nil {
 		return o, err
 	}
-	if o.Kind == "split" {
+	if o.Kind == "dividend" {
+		var aid any
+		if o.AssetID != "" {
+			aid = o.AssetID
+		}
+		_, err = r.q.ExecContext(ctx, `INSERT INTO dividend_details(operation_id,asset_id,amount) VALUES (?,?,?)
+ ON CONFLICT(operation_id) DO UPDATE SET asset_id=excluded.asset_id,amount=excluded.amount`, o.ID, aid, o.Amount)
+	} else if o.Kind == "split" {
 		_, err = r.q.ExecContext(ctx, `INSERT INTO split_details(operation_id,asset_id,old_units,new_units) VALUES (?,?,?,?)
  ON CONFLICT(operation_id) DO UPDATE SET asset_id=excluded.asset_id,old_units=excluded.old_units,new_units=excluded.new_units`, o.ID, o.AssetID, o.OldUnits, o.NewUnits)
 	} else if operations.IsTrade(o.Kind) {
@@ -296,7 +327,11 @@ func RebuildAll(ctx context.Context, tx *sql.Tx) error {
 	if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='split_details' AND type='table')").Scan(&hasSplits); err != nil {
 		return err
 	}
-	r := &Repository{q: tx, legacySchema: !hasSplits}
+	var hasDividends bool
+	if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='dividend_details' AND type='table')").Scan(&hasDividends); err != nil {
+		return err
+	}
+	r := &Repository{q: tx, legacySchema: !hasSplits, preDividendSchema: !hasDividends}
 	rows, err := tx.QueryContext(ctx, "SELECT id FROM portfolios")
 	if err != nil {
 		return err

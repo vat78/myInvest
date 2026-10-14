@@ -67,9 +67,26 @@ func (s *Service) Save(ctx context.Context, pid, id string, in Input) (Operation
 			if err != nil {
 				return err
 			}
-			if (IsTrade(old.Kind) != IsTrade(in.Kind)) || ((old.Kind == "split") != (in.Kind == "split")) {
+			if (IsTrade(old.Kind) != IsTrade(in.Kind)) || ((old.Kind == "split") != (in.Kind == "split")) || ((old.Kind == "dividend") != (in.Kind == "dividend")) {
 				return &FieldError{"kind", "Нельзя изменить вид операции"}
 			}
+		}
+		if in.Kind == "dividend" {
+			in, err = ValidateDividend(in)
+			if err != nil {
+				return err
+			}
+			if in.AssetID != "" {
+				exists, err := r.AssetExists(ctx, in.AssetID)
+				if err != nil {
+					return err
+				}
+				if !exists {
+					return &FieldError{"assetID", "Выберите актив из справочника или оставьте поле пустым"}
+				}
+			}
+			out, err = r.Save(ctx, Operation{ID: id, PortfolioID: pid, Input: in})
+			return err
 		}
 		if in.Kind == "split" {
 			in, err = ValidateSplit(in)

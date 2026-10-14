@@ -167,7 +167,7 @@ func prepareAnalysis(s AnalysisSnapshot, pid, date string, purchasesOnly bool) (
 		if op.Date > date {
 			continue
 		}
-		if op.Kind == "deposit" || op.Kind == "withdrawal" {
+		if op.Kind == "deposit" || op.Kind == "withdrawal" || op.Kind == "dividend" {
 			continue
 		}
 		if op.Kind == "split" {

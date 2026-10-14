@@ -25,3 +25,5 @@ export function SaveSplit(arg1:string,arg2:string,arg3:desktop.SplitInputDTO):Pr
 export function SaveTrade(arg1:string,arg2:string,arg3:desktop.TradeInputDTO):Promise<desktop.CashResultDTO>;
 
 export function UpdateAssetType(arg1:desktop.AssetTypeInputDTO):Promise<desktop.AssetResultDTO>;
+
+export function SaveDividend(arg1:string,arg2:string,arg3:{date:string;assetID:string;amount:string;comment:string}):Promise<desktop.CashResultDTO>;

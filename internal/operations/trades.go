@@ -182,6 +182,12 @@ func Rebuild(operations []Operation) (History, error) {
 			} else {
 				v.Add(v, q)
 			}
+		} else if op.Kind == "dividend" {
+			normalized, err := ValidateDividend(op.Input)
+			if err != nil {
+				return out, err
+			}
+			op.Input = normalized
 		} else {
 			if op.Kind != "deposit" && op.Kind != "withdrawal" {
 				return out, errors.New("invalid stored operation kind")

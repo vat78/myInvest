@@ -102,3 +102,18 @@ func TestAnalysisChartWeightsRemainBounded(t *testing.T) {
 		t.Fatal(out, err)
 	}
 }
+
+func TestDividendsDoNotChangePurchaseAnalysis(t *testing.T) {
+	s := AnalysisSnapshot{Currency: "RUB", Operations: []operations.Operation{analysisTrade("1", "buy", "A", "2", "200", "2026-01-01")}}
+	before, err := BuildAnalysis(s, "1", "2026-01-03")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, asset := range []string{"", "A", "B"} {
+		s.Operations = append(s.Operations, operations.Operation{ID: "2", PortfolioID: "1", Input: operations.Input{Kind: "dividend", Date: "2026-01-02", AssetID: asset, Amount: "10", PortfolioAmount: "10"}})
+	}
+	after, err := BuildAnalysis(s, "1", "2026-01-03")
+	if err != nil || after.Total != before.Total || len(after.Assets) != 1 || after.Assets[0] != before.Assets[0] {
+		t.Fatal(before, after, err)
+	}
+}

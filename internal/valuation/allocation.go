@@ -200,6 +200,12 @@ func BuildAllocation(s AllocationSnapshot, pid, date string) (Allocation, error)
 				return out, e
 			}
 			op.Input = in
+		} else if op.Kind == "dividend" {
+			in, e := operations.ValidateDividend(op.Input)
+			if e != nil {
+				return out, e
+			}
+			op.Input = in
 		} else if operations.IsTrade(op.Kind) {
 			in, e := operations.ValidateTrade(op.Input)
 			if e != nil {
