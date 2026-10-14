@@ -213,12 +213,18 @@ func prepareAnalysis(s AnalysisSnapshot, pid, date string, purchasesOnly bool) (
 				a, _ := decimal(op.Amount)
 				p.amount.Add(p.amount, a)
 			}
-			price, _, err := operations.AveragePrice(op.Amount, op.Quantity)
-			if err != nil {
-				return nil, nil, err
-			}
 			if !purchasesOnly || op.Kind == "buy" {
-				p.price, _ = decimal(price)
+				if purchasesOnly {
+					// Allocation uses the exact purchase price; round only its output.
+					amount, _ := decimal(op.Amount)
+					p.price = new(big.Rat).Quo(amount, q)
+				} else {
+					price, _, err := operations.AveragePrice(op.Amount, op.Quantity)
+					if err != nil {
+						return nil, nil, err
+					}
+					p.price, _ = decimal(price)
+				}
 				p.priceDate = op.Date
 			}
 		}

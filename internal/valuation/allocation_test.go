@@ -192,3 +192,39 @@ func TestAllocationMultipleDeficits(t *testing.T) {
 		t.Fatal(future, e)
 	}
 }
+
+func TestAllocationExactPurchasePrice(t *testing.T) {
+	for _, tt := range []struct {
+		name, quantity, amount, deposit, total, reserve, target, targetQuantity, buyQuantity, buyValue string
+		split                                                                                          bool
+	}{
+		{"repeating price", "3", "100", "200", "200", "50", "150", "4.5", "1.5", "50", false},
+		{"rounding changes valuation", "3000000000000000000", "100", "200", "200", "50", "150", "4500000000000000000", "1500000000000000000", "50", false},
+		{"positive price below display precision", "3000000000000000000", "1", "2", "2", "0.5", "1.5", "4500000000000000000", "1500000000000000000", "0.5", false},
+		{"split adjusts exact price", "3", "100", "200", "200", "50", "150", "13.5", "4.5", "50", true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			s := AllocationSnapshot{
+				Analysis: AnalysisSnapshot{Currency: "RUB", Operations: []operations.Operation{
+					allocationDeposit(tt.deposit), allocationBuy("2", "1", tt.quantity, tt.amount, "2026-01-02"),
+				}},
+				Assets: []operations.Asset{{ID: "1", Ticker: "A"}},
+				Plan:   AllocationPlan{Generation: "g", Revision: "1", CashPercent: "25", Targets: []Target{{"1", "75"}}},
+			}
+			if tt.split {
+				s.Analysis.Operations = append(s.Analysis.Operations, operations.Operation{ID: "3", PortfolioID: "1", Input: operations.Input{Kind: "split", Date: "2026-01-03", AssetID: "1", OldUnits: "1", NewUnits: "3"}})
+			}
+			out, err := BuildAllocation(s, "1", "2026-10-14")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !out.Complete || !out.CanCalculate || len(out.Rows) != 2 {
+				t.Fatalf("allocation unavailable: %+v", out)
+			}
+			row := out.Rows[0]
+			if row.CurrentValue != tt.amount || out.Total != tt.total || out.Reserve != tt.reserve || out.CashAfterBuys != tt.reserve || out.ReserveShortfall != "0" || row.TargetValue != tt.target || row.TargetQuantity != tt.targetQuantity || row.BuyQuantity != tt.buyQuantity || row.RebalanceQuantity != tt.buyQuantity || row.BuyValue != tt.buyValue || row.RebalanceValue != tt.buyValue {
+				t.Fatalf("allocation=%+v row=%+v", out, row)
+			}
+		})
+	}
+}
