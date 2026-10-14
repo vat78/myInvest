@@ -293,11 +293,13 @@ func TestInvalidMigrationSequence(t *testing.T) {
 
 func TestDefaultPathOverride(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("MYINVEST_PORTABLE", "1")
 	t.Setenv("MYINVEST_DATA_DIR", dir)
-	path, err := DefaultPath()
-	if err != nil || path != filepath.Join(dir, "myinvest.sqlite3") {
-		t.Fatalf("path: %s %v", path, err)
+	for _, mode := range []string{"", "0", "1", "invalid"} {
+		t.Setenv("MYINVEST_PORTABLE", mode)
+		path, err := DefaultPath()
+		if err != nil || path != filepath.Join(dir, "myinvest.sqlite3") {
+			t.Fatalf("override with portable=%q: %s %v", mode, path, err)
+		}
 	}
 	t.Setenv("MYINVEST_DATA_DIR", "relative")
 	if _, err := DefaultPath(); err == nil {
@@ -334,15 +336,7 @@ func TestPortableDirectory(t *testing.T) {
 func TestDefaultPathPortableMode(t *testing.T) {
 	t.Setenv("MYINVEST_DATA_DIR", "")
 	t.Setenv("MYINVEST_PORTABLE", "")
-	normal, err := DefaultPath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("MYINVEST_PORTABLE", "0")
-	if got, err := DefaultPath(); err != nil || got != normal {
-		t.Fatalf("disabled portable mode: %s %v", got, err)
-	}
-	t.Setenv("MYINVEST_PORTABLE", "1")
+	t.Chdir(t.TempDir())
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -352,8 +346,35 @@ func TestDefaultPathPortableMode(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := filepath.Join(portableDirectory(executable, runtime.GOOS), "myinvest.sqlite3")
+	for _, mode := range []string{"", "1"} {
+		t.Setenv("MYINVEST_PORTABLE", mode)
+		if mode == "" {
+			if err := os.Unsetenv("MYINVEST_PORTABLE"); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if got, err := DefaultPath(); err != nil || got != want {
+			t.Fatalf("portable=%q: %s %v, want %s", mode, got, err, want)
+		}
+	}
+	t.Setenv("MYINVEST_PORTABLE", "")
 	if got, err := DefaultPath(); err != nil || got != want {
-		t.Fatalf("portable path: %s %v, want %s", got, err, want)
+		t.Fatalf("empty portable setting: %s %v, want %s", got, err, want)
+	}
+	base := t.TempDir()
+	t.Setenv("LOCALAPPDATA", base)
+	t.Setenv("XDG_DATA_HOME", base)
+	if runtime.GOOS == "darwin" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			t.Fatal(err)
+		}
+		base = filepath.Join(home, "Library", "Application Support")
+	}
+	t.Setenv("MYINVEST_PORTABLE", "0")
+	want = filepath.Join(base, "myInvest", "myinvest.sqlite3")
+	if got, err := DefaultPath(); err != nil || got != want {
+		t.Fatalf("disabled portable mode: %s %v, want %s", got, err, want)
 	}
 	t.Setenv("MYINVEST_PORTABLE", "yes")
 	if _, err := DefaultPath(); err == nil {

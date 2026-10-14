@@ -22,7 +22,8 @@ type Store struct{ db *sql.DB }
 // callers must guard repository operations against application shutdown.
 func (s *Store) DB() *sql.DB { return s.db }
 
-// DefaultPath is independent of the working directory and source checkout.
+// DefaultPath stores beside the application unless explicitly overridden.
+// It is independent of the working directory and source checkout.
 func DefaultPath() (string, error) {
 	if override := os.Getenv("MYINVEST_DATA_DIR"); override != "" {
 		if !filepath.IsAbs(override) {
@@ -31,8 +32,8 @@ func DefaultPath() (string, error) {
 		return filepath.Join(override, "myinvest.sqlite3"), nil
 	}
 	switch os.Getenv("MYINVEST_PORTABLE") {
-	case "", "0":
-	case "1":
+	case "0":
+	case "", "1":
 		executable, err := os.Executable()
 		if err != nil {
 			return "", fmt.Errorf("определить путь приложения: %w", err)
