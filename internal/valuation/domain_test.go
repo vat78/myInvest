@@ -74,3 +74,27 @@ func TestMalformedStorage(t *testing.T) {
 		}
 	}
 }
+
+func TestCumulativeDepositsIndependentOfValuation(t *testing.T) {
+	s := Snapshot{Portfolios: []Portfolio{
+		{Name: "R", Currency: "RUB", Days: []Day{{Date: "2026-01-01", Cash: "0.1", Deposits: "0.1"}, {Date: "2026-01-03", Cash: "-1", Deposits: "0.2"}, {Date: "2026-01-05", Cash: "100", Deposits: "100"}}},
+		{Name: "U", Currency: "USD", Days: []Day{{Date: "2026-01-02", Cash: "10", Deposits: "900.1234567890123456789"}}},
+	}, Rates: []Rate{{Date: "2026-01-02", Currency: "USD", Value: "95"}, {Date: "2026-01-03", Currency: "USD", Value: "200"}}}
+	for _, rates := range [][]Rate{s.Rates, nil} {
+		s.Rates = rates
+		out, err := Build(s, "2026-01-04")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, want := range []string{"0.1", "900.2234567890123456789", "900.3234567890123456789", "900.3234567890123456789"} {
+			if out.Points[i].Deposits != want || !out.Points[i].DepositsComplete {
+				t.Fatal(out.Points[i])
+			}
+		}
+	}
+	s.Portfolios[1].Days[0].Deposits = ""
+	out, err := Build(s, "2026-01-03")
+	if err != nil || !out.Points[0].DepositsComplete || out.Points[1].DepositsComplete || out.Points[1].Deposits != "" || len(out.Points[1].DepositIssues) != 1 {
+		t.Fatal(out, err)
+	}
+}
