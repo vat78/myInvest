@@ -195,7 +195,7 @@
     <CashFlowManager bind:this={cashManager} revision={portfolioRevision} onchanged={() => void refreshOverview()} oncreate={() => portfolioManager.openList()} onaddasset={trigger => void assetManager.openList(trigger)} />
   </div>
   <div class="panel" id="panel-analysis" role="tabpanel" aria-labelledby="tab-analysis" hidden={tab !== 'analysis'} tabindex="0">
-    <PortfolioAnalysis revision={analysisRevision} />
+    <PortfolioAnalysis revision={analysisRevision} onquotes={() => { tab = 'quotes'; document.getElementById('tab-quotes')?.focus(); }} />
   </div>
   <div class="panel" id="panel-quotes" role="tabpanel" aria-labelledby="tab-quotes" hidden={tab !== 'quotes'} tabindex="0">
     <QuoteManager revision={quoteRevision} onchanged={() => void refreshOverview()} onrate={openEditor} onaddasset={trigger => void assetManager.openList(trigger)} />

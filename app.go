@@ -27,6 +27,7 @@ import (
 )
 
 type App struct {
+	allocation *valuationdesktop.AllocationAPI
 	quotes     *quotesdesktop.QuotesAPI
 	overview   *valuationdesktop.OverviewAPI
 	cashFlows  *operationsdesktop.CashFlowAPI
@@ -60,6 +61,9 @@ func newApp() *App {
 	})
 	a.quotes = quotesdesktop.NewAPI(func(fn func(*quotes.Service) error) error {
 		return a.withStorage(func(db *sql.DB) error { return fn(quotes.NewService(quotessqlite.NewRepository(db))) })
+	})
+	a.allocation = valuationdesktop.NewAllocationAPI(func(fn func(*valuation.AllocationService) error) error {
+		return a.withStorage(func(db *sql.DB) error { return fn(valuation.NewAllocationService(valuationsqlite.NewRepository(db))) })
 	})
 	return a
 }

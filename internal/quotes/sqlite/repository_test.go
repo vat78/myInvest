@@ -102,7 +102,7 @@ func TestUpgradePreservesDirectoryAndRates(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range names {
-		if name.Name() == "0010_asset_quotes.sql" {
+		if name.Name() >= "0010" {
 			continue
 		}
 		data, err := fs.ReadFile(migrations.Files, name.Name())
