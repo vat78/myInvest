@@ -18,7 +18,7 @@
   }
   function tabKeys(event: KeyboardEvent) {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-    const tabs = ['overview', 'operations', 'analysis', 'quotes'];
+    const tabs = ['overview', 'operations', 'analysis', 'quotes', 'benchmarks'];
     event.preventDefault();
     const step = event.key === 'ArrowLeft' ? -1 : 1;
     tab = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[tabs.length - 1] : tabs[(tabs.indexOf(tab) + step + tabs.length) % tabs.length];
@@ -29,6 +29,7 @@
   import CashFlowManager from './CashFlowManager.svelte';
   import AssetManager from './AssetManager.svelte';
   import QuoteManager from './QuoteManager.svelte';
+  import BenchmarkManager from './BenchmarkManager.svelte';
   let quoteRevision = $state(0);
   let assetManager: AssetManager;
   let cashManager: CashFlowManager;
@@ -178,6 +179,7 @@
     <button id="tab-operations" role="tab" aria-selected={tab === 'operations'} aria-controls="panel-operations" tabindex={tab === 'operations' ? 0 : -1} onclick={() => tab = 'operations'} onkeydown={tabKeys}>Операции</button>
     <button id="tab-analysis" role="tab" aria-selected={tab === 'analysis'} aria-controls="panel-analysis" tabindex={tab === 'analysis' ? 0 : -1} onclick={() => tab = 'analysis'} onkeydown={tabKeys}>Анализ</button>
     <button id="tab-quotes" role="tab" aria-selected={tab === 'quotes'} aria-controls="panel-quotes" tabindex={tab === 'quotes' ? 0 : -1} onclick={() => tab = 'quotes'} onkeydown={tabKeys}>Котировки</button>
+    <button id="tab-benchmarks" role="tab" aria-selected={tab === 'benchmarks'} aria-controls="panel-benchmarks" tabindex={tab === 'benchmarks' ? 0 : -1} onclick={() => tab = 'benchmarks'} onkeydown={tabKeys}>Бенчмарки</button>
   </div>
   <div class="panel" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" hidden={tab !== 'overview'} tabindex="0">
     {#if overview}
@@ -199,6 +201,9 @@
   </div>
   <div class="panel" id="panel-quotes" role="tabpanel" aria-labelledby="tab-quotes" hidden={tab !== 'quotes'} tabindex="0">
     <QuoteManager revision={quoteRevision} onchanged={() => void refreshOverview()} onrate={openEditor} onaddasset={trigger => void assetManager.openList(trigger)} />
+  </div>
+  <div class="panel" id="panel-benchmarks" role="tabpanel" aria-labelledby="tab-benchmarks" hidden={tab !== 'benchmarks'} tabindex="0">
+    <BenchmarkManager />
   </div>
 </main>
 
