@@ -38,17 +38,19 @@
   {#if error}<p class="warning" role="alert">{error} <button onclick={() => void refresh()}>Повторить</button></p>
   {:else if !loading && !portfolios.length}<p>Портфелей пока нет. Добавьте портфель через меню.</p>{/if}
   {#if data}
-    <p class="hint">На {data.date.split('-').reverse().join('.')} · {data.currency}. Цена последней покупки; деньги и комиссии исключены. Будущие операции не учитываются.</p>
+    <p class="hint">На {data.date.split('-').reverse().join('.')} · {data.currency}. Последняя котировка или сделка; деньги и комиссии исключены. Будущие операции не учитываются.</p>
     {#if !data.assets.length}<p>В портфеле нет открытых позиций.</p>
     {:else}
       <div class="layout">
         <article><h2>Структура активов</h2><AnalysisPie analysis={data} /></article>
         <article class="details"><h2>Активы портфеля</h2>
-          <p>{data.complete ? `Стоимость по последней покупке: ${formatChartAmount(data.total)} ${data.currency}` : 'Оценка неполная'}</p>
+          <p>{data.complete ? `Текущая стоимость: ${formatChartAmount(data.total)} ${data.currency}` : 'Оценка неполная'}</p>
           <div class="scroll"><table>
             <caption>Количество и стоимость активов · {data.currency}</caption>
-            <thead><tr><th scope="col">Актив</th><th scope="col">Количество бумаг</th><th scope="col">Стоимость по последней покупке</th><th scope="col">Доля</th><th scope="col">Средняя цена покупки</th><th scope="col">Стоимость по средней цене</th></tr></thead>
-            <tbody>{#each data.assets as a (a.id)}<tr><th scope="row">{a.ticker}</th><td>{formatDecimal(a.quantity)}</td><td>{a.currentValue ? formatChartAmount(a.currentValue) : 'Нет покупки'}</td><td>{a.percent ? `${formatChartAmount(a.percent)}%` : '—'}</td><td>{a.averagePrice ? formatChartAmount(a.averagePrice) : '—'}</td><td>{a.averageValue ? formatChartAmount(a.averageValue) : '—'}</td></tr>{/each}</tbody>
+            <thead><tr><th scope="col">Актив</th><th scope="col">Количество бумаг</th><th scope="col">Текущая стоимость</th><th scope="col">Источник цены</th><th scope="col">Доля</th><th scope="col">Средняя цена покупки</th><th scope="col">Стоимость по средней цене</th></tr></thead>
+            <tbody>{#each data.assets as a (a.id)}<tr><th scope="row">{a.ticker}</th><td>{formatDecimal(a.quantity)}</td><td>{a.currentValue ? formatChartAmount(a.currentValue) : 'Нет цены'}</td><td class="source">{a.priceDate ? `${a.priceSource === 'quote' ? 'Котировка' : 'Сделка'} · ${a.priceDate.split('-').reverse().join('.')} · ${a.priceCurrency}` : '—'}
+              {#if a.priceRate}<span>1 {a.priceCurrency} = {formatDecimal(a.priceRate)} {data.currency} · курс от {a.priceRateDate.split('-').reverse().join('.')}</span>{/if}
+            </td><td>{a.percent ? `${formatChartAmount(a.percent)}%` : '—'}</td><td>{a.averagePrice ? formatChartAmount(a.averagePrice) : '—'}</td><td>{a.averageValue ? formatChartAmount(a.averageValue) : '—'}</td></tr>{/each}</tbody>
           </table></div>
           <p class="hint">Средняя цена: сумма всех покупок / купленное количество с учётом сплитов. Стоимости рассчитаны до округления цен.</p>
           <p class="hint">Суммы и проценты округлены до двух знаков; сумма долей может отличаться от 100%.</p>
@@ -68,6 +70,6 @@
   table { border-collapse: collapse; width: 100%; font-size: 13px; } caption { text-align: left; margin-bottom: 12px; color: #506477; }
   th, td { padding: 12px 8px; border-bottom: 1px solid #dce3e9; text-align: right; font-variant-numeric: tabular-nums; }
   thead th { min-width: 110px; } th:first-child { text-align: left; overflow-wrap: anywhere; }
-  td { white-space: nowrap; } .hint { font-size: 13px; color: #506477; } .warning { color: #a12e2e; }
+  td { white-space: nowrap; } .source { white-space: normal; min-width: 160px; font-size: 12px; } .source span { display: block; margin-top: 6px; overflow-wrap: anywhere; } .hint { font-size: 13px; color: #506477; } .warning { color: #a12e2e; }
   @media (max-width: 850px) { .layout { grid-template-columns: 1fr; } }
 </style>

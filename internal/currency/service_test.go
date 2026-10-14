@@ -103,3 +103,5 @@ func TestServicePropagatesStorageFailures(t *testing.T) {
 		}
 	}
 }
+
+func (r *memoryRepository) ListRates(context.Context) ([]Rate, error) { return []Rate{}, r.err }

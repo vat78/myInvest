@@ -14,6 +14,10 @@ export function ListCurrencies() {
   return window['go']['desktop']['API']['ListCurrencies']();
 }
 
+export function ListCurrencyRates() {
+  return window['go']['desktop']['API']['ListCurrencyRates']();
+}
+
 export function SaveCurrencyRate(arg1) {
   return window['go']['desktop']['API']['SaveCurrencyRate'](arg1);
 }

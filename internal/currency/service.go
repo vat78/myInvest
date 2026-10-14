@@ -4,6 +4,7 @@ import "context"
 
 type Repository interface {
 	ListCurrencies(context.Context) ([]string, error)
+	ListRates(context.Context) ([]Rate, error)
 	AddCurrency(context.Context, string) error
 	FindRate(context.Context, Pair) (string, bool, error)
 	// SaveRates must persist both directions atomically.
@@ -12,8 +13,10 @@ type Repository interface {
 
 type Service struct{ repo Repository }
 
-func NewService(repo Repository) *Service                     { return &Service{repo: repo} }
-func (s *Service) List(ctx context.Context) ([]string, error) { return s.repo.ListCurrencies(ctx) }
+func NewService(repo Repository) *Service                        { return &Service{repo: repo} }
+func (s *Service) List(ctx context.Context) ([]string, error)    { return s.repo.ListCurrencies(ctx) }
+func (s *Service) ListRates(ctx context.Context) ([]Rate, error) { return s.repo.ListRates(ctx) }
+
 func (s *Service) Add(ctx context.Context, input string) (string, error) {
 	code, err := Code(input)
 	if err != nil {

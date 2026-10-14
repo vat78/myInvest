@@ -8,18 +8,24 @@ import (
 )
 
 type AnalysisSnapshot struct {
+	Pricing    Pricing
 	Currency   string
 	Operations []operations.Operation
 }
 type AnalysisAsset struct {
-	ID           string `json:"id"`
-	Ticker       string `json:"ticker"`
-	Quantity     string `json:"quantity"`
-	CurrentValue string `json:"currentValue"`
-	Percent      string `json:"percent"`
-	AveragePrice string `json:"averagePrice"`
-	AverageValue string `json:"averageValue"`
-	ChartValue   string `json:"chartValue"`
+	PriceSource   string `json:"priceSource"`
+	PriceDate     string `json:"priceDate"`
+	PriceCurrency string `json:"priceCurrency"`
+	PriceRate     string `json:"priceRate"`
+	PriceRateDate string `json:"priceRateDate"`
+	ID            string `json:"id"`
+	Ticker        string `json:"ticker"`
+	Quantity      string `json:"quantity"`
+	CurrentValue  string `json:"currentValue"`
+	Percent       string `json:"percent"`
+	AveragePrice  string `json:"averagePrice"`
+	AverageValue  string `json:"averageValue"`
+	ChartValue    string `json:"chartValue"`
 }
 type Analysis struct {
 	PortfolioID string          `json:"portfolioID"`
@@ -32,7 +38,7 @@ type Analysis struct {
 	Issues      []string        `json:"issues"`
 }
 type purchasePosition struct {
-	ticker                          string
+	ticker, priceDate               string
 	quantity, bought, amount, price *big.Rat
 }
 
@@ -64,6 +70,17 @@ func BuildAnalysis(s AnalysisSnapshot, pid, date string) (Analysis, error) {
 		if err := ValidatePortfolioID(op.ID); err != nil {
 			return out, err
 		}
+	}
+	pricing := s.Pricing
+	pricing.Splits = nil
+	for _, op := range ops {
+		if op.Kind == "split" && op.Date <= date {
+			pricing.Splits = append(pricing.Splits, PriceSplit{PortfolioID: pid, AssetID: op.AssetID, Date: op.Date, OldUnits: op.OldUnits, NewUnits: op.NewUnits})
+		}
+	}
+	prices, err := preparePrices(pricing)
+	if err != nil {
+		return out, err
 	}
 	sort.Slice(ops, func(i, j int) bool {
 		a, b := ops[i], ops[j]
@@ -127,12 +144,13 @@ func BuildAnalysis(s AnalysisSnapshot, pid, date string) (Analysis, error) {
 				p.bought.Add(p.bought, q)
 				a, _ := decimal(op.Amount)
 				p.amount.Add(p.amount, a)
-				price, _, err := operations.AveragePrice(op.Amount, op.Quantity)
-				if err != nil {
-					return out, err
-				}
-				p.price, _ = decimal(price)
 			}
+			price, _, err := operations.AveragePrice(op.Amount, op.Quantity)
+			if err != nil {
+				return out, err
+			}
+			p.price, _ = decimal(price)
+			p.priceDate = op.Date
 		}
 	}
 	ids := make([]string, 0, len(positions))
@@ -150,16 +168,30 @@ func BuildAnalysis(s AnalysisSnapshot, pid, date string) (Analysis, error) {
 		if p.quantity.Sign() < 0 {
 			out.Negative = true
 		}
-		if p.price == nil || p.bought.Sign() == 0 {
+		chosen, err := prices.choose(pid, id, s.Currency, date, p.priceDate, p.price)
+		if err != nil {
+			return out, err
+		}
+		row.PriceSource = chosen.Source
+		row.PriceDate = chosen.Date
+		row.PriceCurrency = chosen.Currency
+		row.PriceRate = chosen.Rate
+		row.PriceRateDate = chosen.RateDate
+		if chosen.value == nil {
 			out.Complete = false
-			out.Issues = append(out.Issues, p.ticker+": нет покупки для оценки")
+			issue := chosen.issue
+			if issue == "" {
+				issue = "нет цены для оценки"
+			}
+			out.Issues = append(out.Issues, p.ticker+": "+issue)
 		} else {
-			v := new(big.Rat).Mul(p.quantity, p.price)
+			v := new(big.Rat).Mul(p.quantity, chosen.value)
 			values[id] = v
 			total.Add(total, v)
-			avg := new(big.Rat).Quo(p.amount, p.bought)
 			row.CurrentValue = Format(v, 2)
-
+		}
+		if p.bought.Sign() != 0 {
+			avg := new(big.Rat).Quo(p.amount, p.bought)
 			row.AveragePrice = Format(avg, 2)
 			row.AverageValue = Format(new(big.Rat).Mul(p.quantity, avg), 2)
 		}

@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-type Position struct{ Ticker, TypeCode, Quantity, Numerator, Denominator string }
+type Position struct{ AssetID, TradeDate, Ticker, TypeCode, Quantity, Numerator, Denominator string }
 type Day struct {
 	Date, Cash, Deposits string
 	Positions            []Position
@@ -22,6 +22,7 @@ type Portfolio struct {
 }
 type Rate struct{ Date, Currency, Value string }
 type Snapshot struct {
+	Pricing    Pricing
 	Portfolios []Portfolio
 	Rates      []Rate
 }
@@ -159,7 +160,7 @@ func (a amounts) summary() Summary {
 	}
 	return s
 }
-func dayAmounts(p Portfolio, d Day) (amounts, error) {
+func dayAmounts(p Portfolio, d Day, prices *priceIndex, date string) (amounts, error) {
 	a := empty()
 	cash, err := decimal(d.Cash)
 	if err != nil {
@@ -177,14 +178,26 @@ func dayAmounts(p Portfolio, d Day) (amounts, error) {
 		if q.Sign() == 0 {
 			continue
 		}
-		if pos.Numerator == "" || pos.Denominator == "" {
-			a.issues = append(a.issues, fmt.Sprintf("%s: нет цены %s на %s", p.Name, pos.Ticker, d.Date))
-			continue
+		var tradePrice *big.Rat
+		if pos.Numerator != "" && pos.Denominator != "" {
+			n, ok := new(big.Int).SetString(pos.Numerator, 10)
+			den, ok2 := new(big.Int).SetString(pos.Denominator, 10)
+			if !ok || !ok2 || den.Sign() <= 0 {
+				return a, errors.New("invalid stored position value")
+			}
+			tradePrice = new(big.Rat).Quo(new(big.Rat).SetFrac(n, den), q)
 		}
-		n, ok := new(big.Int).SetString(pos.Numerator, 10)
-		den, ok2 := new(big.Int).SetString(pos.Denominator, 10)
-		if !ok || !ok2 || den.Sign() <= 0 {
-			return a, errors.New("invalid stored position value")
+		chosen, err := prices.choose(p.ID, pos.AssetID, p.Currency, date, pos.TradeDate, tradePrice)
+		if err != nil {
+			return a, err
+		}
+		if chosen.value == nil {
+			issue := chosen.issue
+			if issue == "" {
+				issue = "нет цены на " + date
+			}
+			a.issues = append(a.issues, fmt.Sprintf("%s: %s: %s", p.Name, pos.Ticker, issue))
+			continue
 		}
 		code := pos.TypeCode
 		if code == "" {
@@ -192,7 +205,7 @@ func dayAmounts(p Portfolio, d Day) (amounts, error) {
 		} else if operations.ValidateAssetType(code) != nil {
 			return a, errors.New("invalid asset type")
 		}
-		a.add(code, new(big.Rat).SetFrac(n, den))
+		a.add(code, new(big.Rat).Mul(q, chosen.value))
 	}
 	return a, nil
 }
@@ -216,20 +229,18 @@ func rateAt(rates map[string][]Rate, currency, date string) (Rate, *big.Rat, err
 	return chosen, v, err
 }
 
-type preparedPortfolio struct {
-	portfolio Portfolio
-	days      []amounts
-}
-
-func at(portfolios []preparedPortfolio, rates map[string][]Rate, date string, cards bool) (amounts, []Card, error) {
+func at(portfolios []Portfolio, rates map[string][]Rate, prices *priceIndex, date string, cards bool) (amounts, []Card, error) {
 	total := empty()
 	list := []Card{}
-	for _, prepared := range portfolios {
-		p := prepared.portfolio
+	for _, p := range portfolios {
 		i := sort.Search(len(p.Days), func(i int) bool { return p.Days[i].Date > date }) - 1
 		a := empty()
 		if i >= 0 {
-			a = prepared.days[i]
+			var err error
+			a, err = dayAmounts(p, p.Days[i], prices, date)
+			if err != nil {
+				return total, list, err
+			}
 		}
 		rate, mult, err := rateAt(rates, p.Currency, date)
 		if err != nil {
@@ -264,6 +275,10 @@ func Build(s Snapshot, date string) (Overview, error) {
 		return Overview{}, err
 	}
 	out := Overview{Date: date, Portfolios: []Card{}, Points: []Point{}}
+	prices, err := preparePrices(s.Pricing)
+	if err != nil {
+		return out, err
+	}
 	first := ""
 	rates := map[string][]Rate{}
 	for _, r := range s.Rates {
@@ -272,26 +287,22 @@ func Build(s Snapshot, date string) (Overview, error) {
 	for _, list := range rates {
 		sort.Slice(list, func(i, j int) bool { return list[i].Date < list[j].Date })
 	}
-	prepared := []preparedPortfolio{}
+	prepared := []Portfolio{}
 	for _, p := range s.Portfolios {
 		p.Days = append([]Day(nil), p.Days...)
 		sort.Slice(p.Days, func(i, j int) bool { return p.Days[i].Date < p.Days[j].Date })
-		pp := preparedPortfolio{portfolio: p}
-		for _, d := range p.Days {
-			a, err := dayAmounts(p, d)
-			if err != nil {
-				return out, err
-			}
-			pp.days = append(pp.days, a)
-		}
-		prepared = append(prepared, pp)
+		prepared = append(prepared, p)
 		for _, d := range p.Days {
 			if d.Date <= date && (first == "" || d.Date < first) {
 				first = d.Date
 			}
 		}
 	}
-	total, cards, err := at(prepared, rates, date, true)
+	// Quotes, FX, splits and persisted snapshots are the only valuation events.
+	// Cache complete totals between events; incomplete issues include the requested
+	// date, so keep evaluating those points to preserve their diagnostic text.
+	changes := valuationDates(s, date)
+	total, cards, err := at(prepared, rates, prices, date, true)
 	if err != nil {
 		return out, err
 	}
@@ -303,9 +314,18 @@ func Build(s Snapshot, date string) (Overview, error) {
 		}
 		start, _ := time.Parse("2006-01-02", first)
 		end, _ := time.Parse("2006-01-02", date)
+		var cachedPoint Point
+		cachedChange := -1
 		for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
 			day := d.Format("2006-01-02")
-			a, _, err := at(prepared, rates, day, false)
+			change := sort.Search(len(changes), func(i int) bool { return changes[i] > day })
+			if change == cachedChange && cachedPoint.Complete {
+				point := cachedPoint
+				point.Date = day
+				out.Points = append(out.Points, point)
+				continue
+			}
+			a, _, err := at(prepared, rates, prices, day, false)
 			if err != nil {
 				return out, err
 			}
@@ -313,8 +333,7 @@ func Build(s Snapshot, date string) (Overview, error) {
 			deposits := new(big.Rat)
 			point.DepositsComplete = true
 			point.DepositIssues = []string{}
-			for _, pp := range prepared {
-				p := pp.portfolio
+			for _, p := range prepared {
 				i := sort.Search(len(p.Days), func(i int) bool { return p.Days[i].Date > day }) - 1
 				if i < 0 {
 					continue
@@ -336,8 +355,42 @@ func Build(s Snapshot, date string) (Overview, error) {
 			if point.Complete {
 				point.Value = Format(a.total, 18)
 			}
+			cachedPoint, cachedChange = point, change
 			out.Points = append(out.Points, point)
 		}
 	}
 	return out, nil
+}
+
+// valuationDates includes all inputs that can change valuation or deposit totals.
+func valuationDates(s Snapshot, date string) []string {
+	unique := map[string]struct{}{}
+	add := func(d string) {
+		if d <= date {
+			unique[d] = struct{}{}
+		}
+	}
+	for _, p := range s.Portfolios {
+		for _, d := range p.Days {
+			add(d.Date)
+		}
+	}
+	for _, q := range s.Pricing.Quotes {
+		add(q.Date)
+	}
+	for _, r := range s.Pricing.FX {
+		add(r.Date)
+	}
+	for _, split := range s.Pricing.Splits {
+		add(split.Date)
+	}
+	for _, r := range s.Rates {
+		add(r.Date)
+	}
+	dates := make([]string, 0, len(unique))
+	for d := range unique {
+		dates = append(dates, d)
+	}
+	sort.Strings(dates)
+	return dates
 }

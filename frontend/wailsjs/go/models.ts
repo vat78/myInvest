@@ -335,6 +335,40 @@ export namespace desktop {
 	        this.currencyCode = source["currencyCode"];
 	    }
 	}
+	export class QuoteDTO {
+	    assetID: string;
+	    date: string;
+	    currencyCode: string;
+	    price: string;
+	    ticker: string;
+
+	    static createFrom(source: any = {}) {
+	        return new QuoteDTO(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.assetID = source["assetID"];
+	        this.date = source["date"];
+	        this.currencyCode = source["currencyCode"];
+	        this.price = source["price"];
+	        this.ticker = source["ticker"];
+	    }
+	}
+	export class QuoteResultDTO {
+	    errors: Record<string, string>;
+	    message: string;
+
+	    static createFrom(source: any = {}) {
+	        return new QuoteResultDTO(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.errors = source["errors"];
+	        this.message = source["message"];
+	    }
+	}
 	export class SaveCurrencyRateDTO {
 	    date: string;
 	    base: string;
@@ -490,6 +524,11 @@ export namespace main {
 export namespace valuation {
 
 	export class AnalysisAsset {
+	    priceSource: string;
+	    priceDate: string;
+	    priceCurrency: string;
+	    priceRate: string;
+	    priceRateDate: string;
 	    id: string;
 	    ticker: string;
 	    quantity: string;
@@ -505,6 +544,11 @@ export namespace valuation {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.priceSource = source["priceSource"];
+	        this.priceDate = source["priceDate"];
+	        this.priceCurrency = source["priceCurrency"];
+	        this.priceRate = source["priceRate"];
+	        this.priceRateDate = source["priceRateDate"];
 	        this.id = source["id"];
 	        this.ticker = source["ticker"];
 	        this.quantity = source["quantity"];

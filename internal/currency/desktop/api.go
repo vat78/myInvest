@@ -3,6 +3,7 @@ package desktop
 
 import (
 	"context"
+	"fmt"
 
 	"myinvest/internal/currency"
 )
@@ -61,4 +62,23 @@ func (a *API) SaveCurrencyRate(input SaveCurrencyRateDTO) error {
 	return a.useService(func(s *currency.Service) error {
 		return s.Save(context.Background(), input.Date, input.Base, input.Quote, input.Value)
 	})
+}
+
+// ListCurrencyRates returns exact stored values, including inverse pairs.
+func (a *API) ListCurrencyRates() ([]SaveCurrencyRateDTO, error) {
+	out := []SaveCurrencyRateDTO{}
+	err := a.useService(func(s *currency.Service) error {
+		rows, err := s.ListRates(context.Background())
+		if err != nil {
+			return err
+		}
+		for _, r := range rows {
+			out = append(out, SaveCurrencyRateDTO{r.Date, r.Base, r.Quote, r.Value})
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("Не удалось загрузить курсы валют. Повторите попытку")
+	}
+	return out, nil
 }

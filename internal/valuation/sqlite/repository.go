@@ -36,16 +36,16 @@ func (r *Repository) Load(ctx context.Context, date string) (valuation.Snapshot,
 	if err != nil {
 		return out, err
 	}
-	rows, err = tx.QueryContext(ctx, `SELECT c.portfolio_id,c.date,c.balance,c.deposits_rub,a.ticker,coalesce(a.type_code,''),b.quantity,b.value_numerator,b.value_denominator
+	rows, err = tx.QueryContext(ctx, `SELECT c.portfolio_id,c.date,c.balance,c.deposits_rub,a.ticker,coalesce(a.type_code,''),b.quantity,b.value_numerator,b.value_denominator,CAST(b.asset_id AS TEXT),source.date
  FROM daily_cash_balances c LEFT JOIN daily_asset_balances b ON b.portfolio_id=c.portfolio_id AND b.date=c.date
- LEFT JOIN assets a ON a.id=b.asset_id WHERE c.date<=? ORDER BY c.portfolio_id,c.date,b.asset_id`, date)
+ LEFT JOIN assets a ON a.id=b.asset_id LEFT JOIN operations source ON source.id=b.price_operation_id WHERE c.date<=? ORDER BY c.portfolio_id,c.date,b.asset_id`, date)
 	if err != nil {
 		return out, err
 	}
 	for rows.Next() {
 		var pid, day, cash string
-		var ticker, code, q, num, den, deposits sql.NullString
-		if err = rows.Scan(&pid, &day, &cash, &deposits, &ticker, &code, &q, &num, &den); err != nil {
+		var ticker, code, q, num, den, deposits, assetID, tradeDate sql.NullString
+		if err = rows.Scan(&pid, &day, &cash, &deposits, &ticker, &code, &q, &num, &den, &assetID, &tradeDate); err != nil {
 			rows.Close()
 			return out, err
 		}
@@ -55,7 +55,7 @@ func (r *Repository) Load(ctx context.Context, date string) (valuation.Snapshot,
 		}
 		if ticker.Valid {
 			d := &p.Days[len(p.Days)-1]
-			d.Positions = append(d.Positions, valuation.Position{Ticker: ticker.String, TypeCode: code.String, Quantity: q.String, Numerator: num.String, Denominator: den.String})
+			d.Positions = append(d.Positions, valuation.Position{AssetID: assetID.String, TradeDate: tradeDate.String, Ticker: ticker.String, TypeCode: code.String, Quantity: q.String, Numerator: num.String, Denominator: den.String})
 		}
 	}
 	err = rows.Err()
@@ -77,6 +77,10 @@ func (r *Repository) Load(ctx context.Context, date string) (valuation.Snapshot,
 	}
 	err = rows.Err()
 	rows.Close()
+	if err != nil {
+		return out, err
+	}
+	out.Pricing, err = loadPricing(ctx, tx, date, true)
 	if err != nil {
 		return out, err
 	}

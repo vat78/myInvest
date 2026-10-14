@@ -18,15 +18,18 @@
   }
   function tabKeys(event: KeyboardEvent) {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    const tabs = ['overview', 'operations', 'analysis', 'quotes'];
     event.preventDefault();
-    const tabs = ['overview', 'operations', 'analysis'];
-    tab = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[2] : tabs[(tabs.indexOf(tab) + (event.key === 'ArrowRight' ? 1 : 2)) % tabs.length];
+    const step = event.key === 'ArrowLeft' ? -1 : 1;
+    tab = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[tabs.length - 1] : tabs[(tabs.indexOf(tab) + step + tabs.length) % tabs.length];
     document.getElementById(`tab-${tab}`)?.focus();
   }
   import { formatDecimal, formatChartAmount } from './decimal-format.mjs';
   import PortfolioManager from './PortfolioManager.svelte';
   import CashFlowManager from './CashFlowManager.svelte';
   import AssetManager from './AssetManager.svelte';
+  import QuoteManager from './QuoteManager.svelte';
+  let quoteRevision = $state(0);
   let assetManager: AssetManager;
   let cashManager: CashFlowManager;
   let portfolioManager: PortfolioManager;
@@ -88,11 +91,12 @@
     }
   }
 
-  function openEditor() {
-    date = localDate(); base = 'USD'; quote = 'RUB'; value = ''; error = ''; feedback = '';
+  function openEditor(rate?: {date: string; base: string; quote: string; value: string}) {
+    date = rate?.date ?? localDate(); base = rate?.base ?? 'USD'; quote = rate?.quote ?? 'RUB'; value = rate?.value ?? ''; error = ''; feedback = '';
     opened = true;
     dialog.showModal();
-    void loadRate();
+    if (!rate) void loadRate();
+    else { ++editRequest; loading = false; }
   }
   function closeEditor() {
     if (busy) return;
@@ -106,6 +110,7 @@
     try {
       const added = await AddCurrency(code);
       currencies = [...new Set([...currencies, added])].sort();
+      quoteRevision++;
     } catch (reason) { error = String(reason); }
     finally { busy = false; }
   }
@@ -118,6 +123,7 @@
       void refreshOverview();
       // Loading the header is separate from saving: a read failure must not imply a failed write.
       feedback = 'Курс сохранён';
+      quoteRevision++;
       await refreshToday();
       busy = false;
       closeEditor();
@@ -151,14 +157,14 @@
 
 <header>
   <time datetime={today}>{today.split('-').reverse().join('.')}</time>
-  <button class:missing={!todayRate} class="rate" onclick={openEditor} aria-label="Ввести или изменить курс валют">
+  <button class:missing={!todayRate} class="rate" onclick={() => openEditor()} aria-label="Ввести или изменить курс валют">
     {todayRate ? `1 USD = ${formatDecimal(todayRate)} RUB` : '???'}
   </button>
-  <div class="menu-slot"><AssetManager bind:this={assetManager} onadded={asset => { void cashManager.assetAdded(asset); void refreshOverview(); }} onchanged={() => { void cashManager.refreshAssets(); void refreshOverview(); }} /><PortfolioManager bind:this={portfolioManager} onchanged={() => { portfolioRevision++; void refreshOverview(); }} onassets={trigger => void assetManager.openList(trigger)} /></div>
+  <div class="menu-slot"><AssetManager bind:this={assetManager} onadded={asset => { void cashManager.assetAdded(asset); quoteRevision++; void refreshOverview(); }} onchanged={() => { void cashManager.refreshAssets(); quoteRevision++; void refreshOverview(); }} /><PortfolioManager bind:this={portfolioManager} onchanged={() => { portfolioRevision++; void refreshOverview(); }} onassets={trigger => void assetManager.openList(trigger)} /></div>
 </header>
 <main>
   <section class="hero" aria-label="Сводка инвестиций">
-    <div class="brand"><span class="eyebrow">Личный учёт инвестиций</span><h1>myInvest</h1><p>Ваши инвестиции. Ваши данные.</p><p class="hint">Оценка по последним сделкам на {overview?.date ?? today}. Совокупные итоги в RUB.</p></div>
+    <div class="brand"><span class="eyebrow">Личный учёт инвестиций</span><h1>myInvest</h1><p>Ваши инвестиции. Ваши данные.</p><p class="hint">Оценка по котировкам и сделкам на {overview?.date ?? today}. Совокупные итоги в RUB.</p></div>
     <div class="total"><h2>Структура всех портфелей</h2>
       {#if overview}<strong class="total-value">{overview.total.complete ? `${formatChartAmount(overview.total.value)} RUB` : 'Оценка неполная'}</strong><Allocation summary={overview.total} currency="RUB" />{/if}
     </div>
@@ -171,11 +177,12 @@
     <button id="tab-overview" role="tab" aria-selected={tab === 'overview'} aria-controls="panel-overview" tabindex={tab === 'overview' ? 0 : -1} onclick={() => tab = 'overview'} onkeydown={tabKeys}>Обзор</button>
     <button id="tab-operations" role="tab" aria-selected={tab === 'operations'} aria-controls="panel-operations" tabindex={tab === 'operations' ? 0 : -1} onclick={() => tab = 'operations'} onkeydown={tabKeys}>Операции</button>
     <button id="tab-analysis" role="tab" aria-selected={tab === 'analysis'} aria-controls="panel-analysis" tabindex={tab === 'analysis' ? 0 : -1} onclick={() => tab = 'analysis'} onkeydown={tabKeys}>Анализ</button>
+    <button id="tab-quotes" role="tab" aria-selected={tab === 'quotes'} aria-controls="panel-quotes" tabindex={tab === 'quotes' ? 0 : -1} onclick={() => tab = 'quotes'} onkeydown={tabKeys}>Котировки</button>
   </div>
   <div class="panel" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" hidden={tab !== 'overview'} tabindex="0">
     {#if overview}
       {#if !overview.portfolios.length}<p>Портфелей пока нет. Добавьте портфель через меню.</p>{/if}
-      <article class="history-card"><h2>Совокупная стоимость всех портфелей</h2><p class="hint">На конец каждого дня · RUB · оценка по сделкам</p>
+      <article class="history-card"><h2>Совокупная стоимость всех портфелей</h2><p class="hint">На конец каждого дня · RUB · оценка по котировкам и сделкам</p>
         {#if overview.points.length}<ValueHistory points={overview.points} />{:else}<p>Нет истории операций до сегодняшней даты.</p>{/if}
       </article>
       <div class="portfolios">{#each overview.portfolios as p (p.id)}<article class="portfolio-card"><h2>{p.name}</h2><strong class="total-value">{p.summary.complete ? `${formatChartAmount(p.summary.value)} ${p.currency}` : 'Оценка неполная'}</strong><Allocation summary={p.summary} currency={p.currency} />
@@ -189,6 +196,9 @@
   </div>
   <div class="panel" id="panel-analysis" role="tabpanel" aria-labelledby="tab-analysis" hidden={tab !== 'analysis'} tabindex="0">
     <PortfolioAnalysis revision={analysisRevision} />
+  </div>
+  <div class="panel" id="panel-quotes" role="tabpanel" aria-labelledby="tab-quotes" hidden={tab !== 'quotes'} tabindex="0">
+    <QuoteManager revision={quoteRevision} onchanged={() => void refreshOverview()} onrate={openEditor} onaddasset={trigger => void assetManager.openList(trigger)} />
   </div>
 </main>
 
@@ -235,7 +245,7 @@
   .total, .history-card, .portfolio-card { background: white; padding: 24px; border-radius: 14px; border: 1px solid #dce3e9; min-width: 0; }
   .total h2, .portfolio-card h2, .history-card h2 { font-size: 18px; overflow-wrap: anywhere; }
   .total-value { display: block; font-size: 24px; overflow-wrap: anywhere; }
-  .tabs { display: flex; gap: 8px; border-bottom: 1px solid #dce3e9; padding-bottom: 12px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid #dce3e9; padding-bottom: 12px; }
   .tabs button[aria-selected="true"] { background: #207653; color: white; border-color: #207653; }
   .panel { padding-top: 24px; } .panel[hidden] { display: none; }
   .portfolios { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,300px),1fr)); gap: 20px; margin-top: 20px; }
