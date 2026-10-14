@@ -7,6 +7,9 @@ import (
 	"sync"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"myinvest/internal/benchmarks"
+	benchmarksdesktop "myinvest/internal/benchmarks/desktop"
+	benchmarkssqlite "myinvest/internal/benchmarks/sqlite"
 	"myinvest/internal/currency"
 	"myinvest/internal/currency/desktop"
 	currencysqlite "myinvest/internal/currency/sqlite"
@@ -27,6 +30,7 @@ import (
 )
 
 type App struct {
+	benchmarks *benchmarksdesktop.BenchmarksAPI
 	allocation *valuationdesktop.AllocationAPI
 	quotes     *quotesdesktop.QuotesAPI
 	overview   *valuationdesktop.OverviewAPI
@@ -45,6 +49,9 @@ type AppInfo struct {
 
 func newApp() *App {
 	a := &App{ready: make(chan struct{})}
+	a.benchmarks = benchmarksdesktop.NewAPI(func(fn func(*benchmarks.Service) error) error {
+		return a.withStorage(func(db *sql.DB) error { return fn(benchmarks.NewService(benchmarkssqlite.NewRepository(db))) })
+	})
 	a.currencies = desktop.NewAPI(func(fn func(*currency.Service) error) error {
 		return a.withStorage(func(db *sql.DB) error {
 			return fn(currency.NewService(currencysqlite.NewRepository(db)))
