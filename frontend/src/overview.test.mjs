@@ -38,5 +38,8 @@ test('response for a previous local date or destroyed screen is discarded', asyn
 test('keyboard tab switching chooses the matching panel and restores tab focus', () => {
   const {h,sandbox} = harness(async () => ({})); assert.equal(h.tab, 'overview');
   h.keys({key:'ArrowRight',preventDefault(){}}); assert.equal(h.tab,'operations'); assert.equal(sandbox.focused,'tab-operations');
+  h.keys({key:'ArrowRight',preventDefault(){}}); assert.equal(h.tab,'analysis'); assert.equal(sandbox.focused,'tab-analysis');
+  h.keys({key:'ArrowRight',preventDefault(){}}); assert.equal(h.tab,'overview');
+  h.keys({key:'End',preventDefault(){}}); assert.equal(h.tab,'analysis');
   h.keys({key:'Home',preventDefault(){}}); assert.equal(h.tab,'overview'); assert.equal(sandbox.focused,'tab-overview');
 });
