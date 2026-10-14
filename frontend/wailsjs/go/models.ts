@@ -1,5 +1,21 @@
 export namespace desktop {
 
+	export class AllocationResult {
+	    errors: Record<string, string>;
+	    message: string;
+	    conflict: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new AllocationResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.errors = source["errors"];
+	        this.message = source["message"];
+	        this.conflict = source["conflict"];
+	    }
+	}
 	export class AssetDTO {
 	    id: string;
 	    ticker: string;
@@ -521,7 +537,198 @@ export namespace main {
 
 }
 
+export namespace operations {
+
+	export class Asset {
+	    ID: string;
+	    Ticker: string;
+	    TypeCode: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Asset(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ID = source["ID"];
+	        this.Ticker = source["Ticker"];
+	        this.TypeCode = source["TypeCode"];
+	    }
+	}
+
+}
+
 export namespace valuation {
+
+	export class AllocationRow {
+	    id: string;
+	    ticker: string;
+	    cash: boolean;
+	    quantity: string;
+	    currentValue: string;
+	    percent: string;
+	    targetValue: string;
+	    targetQuantity: string;
+	    buyQuantity: string;
+	    buyValue: string;
+	    rebalanceQuantity: string;
+	    rebalanceValue: string;
+	    priceSource: string;
+	    priceDate: string;
+	    priceCurrency: string;
+	    priceRate: string;
+	    priceRateDate: string;
+	    issue: string;
+
+	    static createFrom(source: any = {}) {
+	        return new AllocationRow(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.ticker = source["ticker"];
+	        this.cash = source["cash"];
+	        this.quantity = source["quantity"];
+	        this.currentValue = source["currentValue"];
+	        this.percent = source["percent"];
+	        this.targetValue = source["targetValue"];
+	        this.targetQuantity = source["targetQuantity"];
+	        this.buyQuantity = source["buyQuantity"];
+	        this.buyValue = source["buyValue"];
+	        this.rebalanceQuantity = source["rebalanceQuantity"];
+	        this.rebalanceValue = source["rebalanceValue"];
+	        this.priceSource = source["priceSource"];
+	        this.priceDate = source["priceDate"];
+	        this.priceCurrency = source["priceCurrency"];
+	        this.priceRate = source["priceRate"];
+	        this.priceRateDate = source["priceRateDate"];
+	        this.issue = source["issue"];
+	    }
+	}
+	export class Target {
+	    assetID: string;
+	    percent: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Target(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.assetID = source["assetID"];
+	        this.percent = source["percent"];
+	    }
+	}
+	export class AllocationPlan {
+	    generation: string;
+	    revision: string;
+	    cashPercent: string;
+	    targets: Target[];
+
+	    static createFrom(source: any = {}) {
+	        return new AllocationPlan(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.generation = source["generation"];
+	        this.revision = source["revision"];
+	        this.cashPercent = source["cashPercent"];
+	        this.targets = this.convertValues(source["targets"], Target);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Allocation {
+	    portfolioID: string;
+	    date: string;
+	    currency: string;
+	    plan: AllocationPlan;
+	    assets: operations.Asset[];
+	    rows: AllocationRow[];
+	    total: string;
+	    cash: string;
+	    reserve: string;
+	    cashAfterBuys: string;
+	    reserveShortfall: string;
+	    complete: boolean;
+	    canCalculate: boolean;
+	    issues: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new Allocation(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.portfolioID = source["portfolioID"];
+	        this.date = source["date"];
+	        this.currency = source["currency"];
+	        this.plan = this.convertValues(source["plan"], AllocationPlan);
+	        this.assets = this.convertValues(source["assets"], operations.Asset);
+	        this.rows = this.convertValues(source["rows"], AllocationRow);
+	        this.total = source["total"];
+	        this.cash = source["cash"];
+	        this.reserve = source["reserve"];
+	        this.cashAfterBuys = source["cashAfterBuys"];
+	        this.reserveShortfall = source["reserveShortfall"];
+	        this.complete = source["complete"];
+	        this.canCalculate = source["canCalculate"];
+	        this.issues = source["issues"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+	export class AllocationPreview {
+	    total: string;
+	    difference: string;
+	    errors: Record<string, string>;
+
+	    static createFrom(source: any = {}) {
+	        return new AllocationPreview(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.total = source["total"];
+	        this.difference = source["difference"];
+	        this.errors = source["errors"];
+	    }
+	}
 
 	export class AnalysisAsset {
 	    priceSource: string;
@@ -761,6 +968,7 @@ export namespace valuation {
 		    return a;
 		}
 	}
+
 
 
 }

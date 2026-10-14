@@ -5,7 +5,10 @@
   import { localDate } from './calendar';
   import { formatDecimal, formatChartAmount } from './decimal-format.mjs';
   import AnalysisPie from './AnalysisPie.svelte';
-  let { revision = 0 }: { revision?: number } = $props();
+  import TargetAllocation from './TargetAllocation.svelte';
+  let targetAllocation = $state<TargetAllocation>();
+
+  let { revision = 0, onquotes = () => {} }: { revision?: number; onquotes?: () => void } = $props();
   let portfolios = $state<Awaited<ReturnType<typeof ListPortfolios>>>([]);
   let selected = $state('');
   let data = $state<Awaited<ReturnType<typeof GetPortfolioAnalysis>> | null>(null);
@@ -29,9 +32,14 @@
   }
   $effect(() => { void revision; void refresh(); });
   onMount(() => () => { alive = false; ++request; });
+  function changePortfolio(event: Event) {
+    const select = event.currentTarget as HTMLSelectElement;
+    if (targetAllocation && !targetAllocation.canLeave()) { select.value = selected; return; }
+    selected = select.value; void refresh();
+  }
 </script>
 <section aria-label="Анализ портфеля">
-  <label>Портфель <select bind:value={selected} onchange={() => void refresh()} disabled={!portfolios.length}>
+  <label>Портфель <select value={selected} onchange={changePortfolio} disabled={!portfolios.length}>
     {#each portfolios as p (p.id)}<option value={p.id}>{p.name} · {p.currencyCode}</option>{/each}
   </select></label>
   {#if loading}<p role="status">Загрузка анализа…</p>{/if}
@@ -60,6 +68,7 @@
     {#if data.negative}<p class="warning">Есть отрицательные позиции. Проверьте полноту истории; доли и диаграмма недоступны.</p>{/if}
     {#each data.issues as issue}<p class="warning">{issue}</p>{/each}
   {/if}
+  {#if selected}<TargetAllocation bind:this={targetAllocation} pid={selected} {revision} {onquotes} />{/if}
 </section>
 <style>
   label { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
