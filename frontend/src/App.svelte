@@ -1,5 +1,23 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import Allocation from './Allocation.svelte';
+  import ValueHistory from './ValueHistory.svelte';
+  import { GetOverview } from '../wailsjs/go/desktop/OverviewAPI';
+  let overview = $state<Awaited<ReturnType<typeof GetOverview>> | null>(null);
+  let overviewLoading = $state(true), overviewError = $state('');
+  let overviewRequest = 0;
+  let tab = $state('overview');
+  async function refreshOverview() {
+    const request = ++overviewRequest, day = localDate(); overviewLoading = true; overviewError = '';
+    try { const result = await GetOverview(day); if (alive && request === overviewRequest && day === localDate()) overview = result; }
+    catch { if (alive && request === overviewRequest) overviewError = 'Не удалось обновить обзор. Показанные ранее данные устарели.'; }
+    finally { if (alive && request === overviewRequest) overviewLoading = false; }
+  }
+  function tabKeys(event: KeyboardEvent) {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault(); tab = event.key === 'Home' ? 'overview' : event.key === 'End' ? 'operations' : tab === 'overview' ? 'operations' : 'overview';
+    document.getElementById(`tab-${tab}`)?.focus();
+  }
   import { formatDecimal } from './decimal-format.mjs';
   import PortfolioManager from './PortfolioManager.svelte';
   import CashFlowManager from './CashFlowManager.svelte';
@@ -92,6 +110,7 @@
     busy = true; error = ''; feedback = '';
     try {
       await SaveCurrencyRate({ date, base, quote, value });
+      void refreshOverview();
       // Loading the header is separate from saving: a read failure must not imply a failed write.
       feedback = 'Курс сохранён';
       await refreshToday();
@@ -104,19 +123,20 @@
   onMount(() => {
     alive = true;
     void refreshToday();
+    void refreshOverview();
     void ListCurrencies().then(codes => {
       if (!alive) return;
       currencies = codes;
       if (opened) void loadRate();
     }).catch(reason => { if (alive) mainError = `Не удалось загрузить валюты: ${String(reason)}`; });
-    const checkDay = () => { if (localDate() !== today) void refreshToday(); };
-    const focus = () => { void refreshToday(); };
+    const checkDay = () => { if (localDate() !== today) { void refreshToday(); void refreshOverview(); } };
+    const focus = () => { void refreshToday(); void refreshOverview(); };
     const visibility = () => { if (!document.hidden) focus(); };
     const timer = window.setInterval(checkDay, 1000);
     window.addEventListener('focus', focus);
     document.addEventListener('visibilitychange', visibility);
     return () => {
-      alive = false; ++mainRequest; ++editRequest;
+      alive = false; ++mainRequest; ++editRequest; ++overviewRequest;
       window.clearInterval(timer);
       window.removeEventListener('focus', focus);
       document.removeEventListener('visibilitychange', visibility);
@@ -129,15 +149,38 @@
   <button class:missing={!todayRate} class="rate" onclick={openEditor} aria-label="Ввести или изменить курс валют">
     {todayRate ? `1 USD = ${formatDecimal(todayRate)} RUB` : '???'}
   </button>
-  <div class="menu-slot"><AssetManager bind:this={assetManager} onadded={asset => cashManager.assetAdded(asset)} onchanged={() => void cashManager.refreshAssets()} /><PortfolioManager bind:this={portfolioManager} onchanged={() => portfolioRevision++} onassets={trigger => void assetManager.openList(trigger)} /></div>
+  <div class="menu-slot"><AssetManager bind:this={assetManager} onadded={asset => { void cashManager.assetAdded(asset); void refreshOverview(); }} onchanged={() => { void cashManager.refreshAssets(); void refreshOverview(); }} /><PortfolioManager bind:this={portfolioManager} onchanged={() => { portfolioRevision++; void refreshOverview(); }} onassets={trigger => void assetManager.openList(trigger)} /></div>
 </header>
 <main>
-  <span class="eyebrow">Личный учёт инвестиций</span>
-  <h1>myInvest</h1>
-  <p>Ваши инвестиции. Ваши данные.</p>
+  <section class="hero" aria-label="Сводка инвестиций">
+    <div class="brand"><span class="eyebrow">Личный учёт инвестиций</span><h1>myInvest</h1><p>Ваши инвестиции. Ваши данные.</p><p class="hint">Оценка по последним сделкам на {overview?.date ?? today}. Совокупные итоги в RUB.</p></div>
+    <div class="total"><h2>Структура всех портфелей</h2>
+      {#if overview}<strong class="total-value">{overview.total.complete ? `${formatDecimal(overview.total.value)} RUB` : 'Оценка неполная'}</strong><Allocation summary={overview.total} currency="RUB" />{/if}
+    </div>
+  </section>
   {#if mainError}<p class="error" role="alert">{mainError}</p>{/if}
   {#if feedback}<p role="status">{feedback}</p>{/if}
-  <CashFlowManager bind:this={cashManager} revision={portfolioRevision} oncreate={() => portfolioManager.openList()} onaddasset={trigger => void assetManager.openList(trigger)} />
+  {#if overviewLoading}<p role="status">Загрузка обзора…</p>{/if}
+  {#if overviewError}<p class="error" role="alert">{overviewError} <button onclick={() => void refreshOverview()}>Повторить</button></p>{/if}
+  <div class="tabs" role="tablist" aria-label="Основные разделы">
+    <button id="tab-overview" role="tab" aria-selected={tab === 'overview'} aria-controls="panel-overview" tabindex={tab === 'overview' ? 0 : -1} onclick={() => tab = 'overview'} onkeydown={tabKeys}>Обзор</button>
+    <button id="tab-operations" role="tab" aria-selected={tab === 'operations'} aria-controls="panel-operations" tabindex={tab === 'operations' ? 0 : -1} onclick={() => tab = 'operations'} onkeydown={tabKeys}>Операции</button>
+  </div>
+  <div class="panel" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" hidden={tab !== 'overview'} tabindex="0">
+    {#if overview}
+      {#if !overview.portfolios.length}<p>Портфелей пока нет. Добавьте портфель через меню.</p>{/if}
+      <article class="history-card"><h2>Совокупная стоимость всех портфелей</h2><p class="hint">На конец каждого дня · RUB · оценка по сделкам</p>
+        {#if overview.points.length}<ValueHistory points={overview.points} />{:else}<p>Нет истории операций до сегодняшней даты.</p>{/if}
+      </article>
+      <div class="portfolios">{#each overview.portfolios as p (p.id)}<article class="portfolio-card"><h2>{p.name}</h2><strong class="total-value">{p.summary.complete ? `${formatDecimal(p.summary.value)} ${p.currency}` : 'Оценка неполная'}</strong><Allocation summary={p.summary} currency={p.currency} />
+        {#if p.currency !== 'RUB'}<p class="hint">{p.rate ? `Для совокупной оценки: 1 ${p.currency} = ${formatDecimal(p.rate)} RUB · курс от ${p.rateDate}` : `Курс ${p.currency} → RUB отсутствует`}</p>{/if}
+      </article>{/each}</div>
+    {/if}
+  </div>
+  <div class="panel" id="panel-operations" role="tabpanel" aria-labelledby="tab-operations" hidden={tab !== 'operations'} tabindex="0">
+    <p class="hint">Баланс журнала учитывает всю введённую историю, включая будущие операции.</p>
+    <CashFlowManager bind:this={cashManager} revision={portfolioRevision} onchanged={() => void refreshOverview()} oncreate={() => portfolioManager.openList()} onaddasset={trigger => void assetManager.openList(trigger)} />
+  </div>
 </main>
 
 <dialog bind:this={dialog} oncancel={(event) => { event.preventDefault(); closeEditor(); }}>
@@ -177,7 +220,17 @@
   .menu-slot { margin-left: auto; }
   .rate { font-weight: 600; overflow-wrap: anywhere; text-align: left; max-width: 100%; }
   .missing, .error { color: #a12e2e; }
-  main { max-width: 1200px; margin: 0 auto; padding: 80px 32px; }
+  main { max-width: 1200px; margin: 0 auto; padding: 32px; }
+  .hero { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; margin-bottom: 28px; }
+  .brand > p { color: #506477; font-size: 20px; } .brand > .hint { font-size: 14px; }
+  .total, .history-card, .portfolio-card { background: white; padding: 24px; border-radius: 14px; border: 1px solid #dce3e9; min-width: 0; }
+  .total h2, .portfolio-card h2, .history-card h2 { font-size: 18px; overflow-wrap: anywhere; }
+  .total-value { display: block; font-size: 24px; overflow-wrap: anywhere; }
+  .tabs { display: flex; gap: 8px; border-bottom: 1px solid #dce3e9; padding-bottom: 12px; }
+  .tabs button[aria-selected="true"] { background: #207653; color: white; border-color: #207653; }
+  .panel { padding-top: 24px; } .panel[hidden] { display: none; }
+  .portfolios { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,300px),1fr)); gap: 20px; margin-top: 20px; }
+  @media (max-width: 760px) { .hero { grid-template-columns: 1fr; gap: 20px; } main { padding: 24px 16px; } }
   .eyebrow, .hint { color: #506477; font-size: 14px; }
   h1 { margin: 16px 0; font-size: 56px; font-weight: 650; letter-spacing: -.04em; }
   main > p { color: #506477; font-size: 20px; }

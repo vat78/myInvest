@@ -18,7 +18,7 @@ func main() {
 		Title: "myInvest", Width: 1024, Height: 720, MinWidth: 640, MinHeight: 480,
 		AssetServer: &assetserver.Options{Assets: assets},
 		OnStartup:   app.startup, OnDomReady: app.domReady, OnShutdown: app.shutdown,
-		Bind: []interface{}{app, app.currencies, app.portfolios, app.cashFlows},
+		Bind: []interface{}{app, app.currencies, app.portfolios, app.cashFlows, app.overview},
 	}); err != nil {
 		log.Printf("Не удалось запустить myInvest: %v", err)
 	}

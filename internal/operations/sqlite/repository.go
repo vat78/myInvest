@@ -234,12 +234,29 @@ func (r *Repository) rebuild(ctx context.Context, pid string) error {
 	if _, err = r.q.ExecContext(ctx, "DELETE FROM daily_cash_balances WHERE portfolio_id=?", pid); err != nil {
 		return err
 	}
+	var valued bool
+	if err = r.q.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM pragma_table_info('daily_asset_balances') WHERE name='value_numerator')").Scan(&valued); err != nil {
+		return err
+	}
 	for _, day := range history.Days {
 		if _, err = r.q.ExecContext(ctx, "INSERT INTO daily_cash_balances(portfolio_id,date,balance) VALUES (?,?,?)", pid, day.Date, day.Balance); err != nil {
 			return err
 		}
 		for aid, q := range day.Quantities {
-			if _, err = r.q.ExecContext(ctx, "INSERT INTO daily_asset_balances(portfolio_id,date,asset_id,quantity) VALUES (?,?,?,?)", pid, day.Date, aid, q); err != nil {
+			if valued {
+				value, available := day.Values[aid]
+				var num, den, source any
+				if available {
+					num, den = value.Numerator, value.Denominator
+					if value.PriceOperationID != "" {
+						source = value.PriceOperationID
+					}
+				}
+				_, err = r.q.ExecContext(ctx, "INSERT INTO daily_asset_balances(portfolio_id,date,asset_id,quantity,value_numerator,value_denominator,price_operation_id) VALUES (?,?,?,?,?,?,?)", pid, day.Date, aid, q, num, den, source)
+			} else {
+				_, err = r.q.ExecContext(ctx, "INSERT INTO daily_asset_balances(portfolio_id,date,asset_id,quantity) VALUES (?,?,?,?)", pid, day.Date, aid, q)
+			}
+			if err != nil {
 				return err
 			}
 		}

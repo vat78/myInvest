@@ -101,7 +101,9 @@ func MoneyChange(op Operation) string {
 type Day struct {
 	Date, Balance string
 	Quantities    map[string]string
+	Values        map[string]PositionValue
 }
+type PositionValue struct{ Numerator, Denominator, PriceOperationID string }
 type Warning struct{ OperationID, Date, Ticker, Available, Quantity string }
 type CashWarning struct{ Date, Balance string }
 
@@ -131,6 +133,8 @@ func Rebuild(operations []Operation) (History, error) {
 	out := History{Balance: "0", Days: []Day{}, Warnings: []Warning{}, Splits: map[string]SplitQuantities{}}
 	cash := new(big.Rat)
 	positions := map[string]*big.Rat{}
+	prices := map[string]*big.Rat{}
+	sources := map[string]string{}
 	for i, op := range ops {
 		if op.Kind == "split" {
 			in, err := ValidateSplit(op.Input)
@@ -148,6 +152,9 @@ func Rebuild(operations []Operation) (History, error) {
 				return out, &SplitError{op.Ticker, op.Date, in.OldUnits, in.NewUnits}
 			}
 			v.Set(rational(after))
+			if price := prices[in.AssetID]; price != nil {
+				price.Mul(price, new(big.Rat).Quo(rational(in.OldUnits), rational(in.NewUnits)))
+			}
 			out.Splits[op.ID] = SplitQuantities{before, after}
 		} else if IsTrade(op.Kind) {
 			normalized, err := ValidateTrade(op.Input)
@@ -155,6 +162,12 @@ func Rebuild(operations []Operation) (History, error) {
 				return out, err
 			}
 			op.Input = normalized
+			price, _, err := AveragePrice(op.Amount, op.Quantity)
+			if err != nil {
+				return out, err
+			}
+			prices[op.AssetID] = rational(price)
+			sources[op.AssetID] = op.ID
 			v := positions[op.AssetID]
 			if v == nil {
 				v = new(big.Rat)
@@ -181,12 +194,19 @@ func Rebuild(operations []Operation) (History, error) {
 		}
 		cash.Add(cash, rational(MoneyChange(op)))
 		if i+1 == len(ops) || ops[i+1].Date != op.Date {
-			day := Day{Date: op.Date, Balance: exact(cash), Quantities: map[string]string{}}
+			day := Day{Date: op.Date, Balance: exact(cash), Quantities: map[string]string{}, Values: map[string]PositionValue{}}
 			if cash.Sign() < 0 {
 				out.CashWarnings = append(out.CashWarnings, CashWarning{op.Date, day.Balance})
 			}
 			for id, v := range positions {
 				day.Quantities[id] = exact(v)
+				if price := prices[id]; price != nil || v.Sign() == 0 {
+					value := new(big.Rat)
+					if price != nil {
+						value.Mul(v, price)
+					}
+					day.Values[id] = PositionValue{value.Num().String(), value.Denom().String(), sources[id]}
+				}
 			}
 			out.Days = append(out.Days, day)
 		}
