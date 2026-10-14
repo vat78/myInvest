@@ -13,8 +13,8 @@ import (
 
 type Position struct{ Ticker, TypeCode, Quantity, Numerator, Denominator string }
 type Day struct {
-	Date, Cash string
-	Positions  []Position
+	Date, Cash, Deposits string
+	Positions            []Position
 }
 type Portfolio struct {
 	ID, Name, Currency string
@@ -56,10 +56,13 @@ type Card struct {
 	Summary  Summary `json:"summary"`
 }
 type Point struct {
-	Date     string   `json:"date"`
-	Value    string   `json:"value"`
-	Complete bool     `json:"complete"`
-	Issues   []string `json:"issues"`
+	Deposits         string   `json:"deposits"`
+	DepositsComplete bool     `json:"depositsComplete"`
+	DepositIssues    []string `json:"depositIssues"`
+	Date             string   `json:"date"`
+	Value            string   `json:"value"`
+	Complete         bool     `json:"complete"`
+	Issues           []string `json:"issues"`
 }
 type Overview struct {
 	Date       string  `json:"date"`
@@ -307,6 +310,29 @@ func Build(s Snapshot, date string) (Overview, error) {
 				return out, err
 			}
 			point := Point{Date: day, Complete: len(a.issues) == 0, Issues: a.issues}
+			deposits := new(big.Rat)
+			point.DepositsComplete = true
+			point.DepositIssues = []string{}
+			for _, pp := range prepared {
+				p := pp.portfolio
+				i := sort.Search(len(p.Days), func(i int) bool { return p.Days[i].Date > day }) - 1
+				if i < 0 {
+					continue
+				}
+				if p.Days[i].Deposits == "" {
+					point.DepositsComplete = false
+					point.DepositIssues = append(point.DepositIssues, fmt.Sprintf("%s: у пополнения нет сохранённой суммы в RUB", p.Name))
+					continue
+				}
+				v, err := decimal(p.Days[i].Deposits)
+				if err != nil || v.Sign() < 0 {
+					return out, errors.New("invalid stored RUB deposits")
+				}
+				deposits.Add(deposits, v)
+			}
+			if point.DepositsComplete {
+				point.Deposits = operations.ExactDecimal(deposits)
+			}
 			if point.Complete {
 				point.Value = Format(a.total, 18)
 			}

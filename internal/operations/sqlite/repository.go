@@ -238,9 +238,33 @@ func (r *Repository) rebuild(ctx context.Context, pid string) error {
 	if err = r.q.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM pragma_table_info('daily_asset_balances') WHERE name='value_numerator')").Scan(&valued); err != nil {
 		return err
 	}
+	var depositsEnabled bool
+	if err = r.q.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM pragma_table_info('daily_cash_balances') WHERE name='deposits_rub')").Scan(&depositsEnabled); err != nil {
+		return err
+	}
+	var deposits map[string]string
+	if depositsEnabled {
+		currency, e := r.PortfolioCurrency(ctx, pid)
+		if e != nil {
+			return e
+		}
+		deposits, err = operations.DepositTotals(ops, currency)
+		if err != nil {
+			return err
+		}
+	}
 	for _, day := range history.Days {
 		if _, err = r.q.ExecContext(ctx, "INSERT INTO daily_cash_balances(portfolio_id,date,balance) VALUES (?,?,?)", pid, day.Date, day.Balance); err != nil {
 			return err
+		}
+		if depositsEnabled {
+			var value any
+			if deposits[day.Date] != "" {
+				value = deposits[day.Date]
+			}
+			if _, err = r.q.ExecContext(ctx, "UPDATE daily_cash_balances SET deposits_rub=? WHERE portfolio_id=? AND date=?", value, pid, day.Date); err != nil {
+				return err
+			}
 		}
 		for aid, q := range day.Quantities {
 			if valued {

@@ -587,6 +587,9 @@ export namespace valuation {
 	}
 
 	export class Point {
+	    deposits: string;
+	    depositsComplete: boolean;
+	    depositIssues: string[];
 	    date: string;
 	    value: string;
 	    complete: boolean;
@@ -598,6 +601,9 @@ export namespace valuation {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.deposits = source["deposits"];
+	        this.depositsComplete = source["depositsComplete"];
+	        this.depositIssues = source["depositIssues"];
 	        this.date = source["date"];
 	        this.value = source["value"];
 	        this.complete = source["complete"];
