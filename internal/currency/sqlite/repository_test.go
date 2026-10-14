@@ -287,3 +287,23 @@ func TestExistingRatesRemainUntilExplicitSave(t *testing.T) {
 	}
 	assertRate(t, s, "2026-10-12", "RUB", "USD", "0.010526315789473684")
 }
+
+func TestListRatesExactAndOrdered(t *testing.T) {
+	store := openTest(t, filepath.Join(t.TempDir(), "rates.db"), shipped.Files)
+	s := currency.NewService(store)
+	rows, err := s.ListRates(ctx)
+	if err != nil || rows == nil || len(rows) != 0 {
+		t.Fatalf("empty: %v %v", rows, err)
+	}
+	value := "95.1234567890123456789012345678900"
+	if err = s.Save(ctx, "2026-10-14", "USD", "RUB", value); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Save(ctx, "2026-10-13", "USD", "RUB", "94"); err != nil {
+		t.Fatal(err)
+	}
+	rows, err = s.ListRates(ctx)
+	if err != nil || len(rows) != 4 || rows[0].Date != "2026-10-14" || rows[0].Base != "RUB" || rows[1].Value != value || rows[2].Date != "2026-10-13" {
+		t.Fatalf("list: %#v %v", rows, err)
+	}
+}

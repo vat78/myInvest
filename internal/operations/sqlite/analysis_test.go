@@ -34,10 +34,10 @@ func TestAnalysisSnapshotCRUDAndIsolation(t *testing.T) {
 			t.Fatal(out, err)
 		}
 	}
-	check("1", "320", "120")
+	check("1", "1998", "120")
 	check("2", "500", "500")
 	save("1", buy.ID, "buy", "2", "260", "2026-01-01")
-	check("1", "320", "140")
+	check("1", "1998", "140")
 	if err = s.Delete(ctx, "1", sale.ID); err != nil {
 		t.Fatal(err)
 	}

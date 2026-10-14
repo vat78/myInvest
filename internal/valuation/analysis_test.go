@@ -18,7 +18,7 @@ func TestAnalysisPurchaseRules(t *testing.T) {
 		ops                           []operations.Operation
 		quantity, current, avg, value string
 	}{
-		{"all buys, sell does not set price", []operations.Operation{analysisTrade("1", "buy", "A", "2", "200", "2026-01-01"), analysisTrade("2", "buy", "A", "1", "160", "2026-01-02"), analysisTrade("3", "sell", "A", "1", "900", "2026-01-03")}, "2", "320", "120", "240"},
+		{"all buys, latest sell sets current price", []operations.Operation{analysisTrade("1", "buy", "A", "2", "200", "2026-01-01"), analysisTrade("2", "buy", "A", "1", "160", "2026-01-02"), analysisTrade("3", "sell", "A", "1", "900", "2026-01-03")}, "2", "1800", "120", "240"},
 		{"fractions and expenses", []operations.Operation{analysisTrade("1", "buy", "A", "0.1", "0.01", "2026-01-01"), analysisTrade("2", "buy", "A", "0.2", "0.04", "2026-01-02")}, "0.3", "0.06", "0.17", "0.05"},
 		{"split then buy same day", []operations.Operation{analysisTrade("1", "buy", "A", "2", "200", "2026-01-01"), analysisTrade("2", "buy", "A", "2", "60", "2026-01-02"), analysisSplit("3", "1", "2", "2026-01-02")}, "6", "180", "43.33", "260"},
 		{"reverse split periodic price", []operations.Operation{analysisTrade("1", "buy", "A", "3", "1", "2026-01-01"), analysisSplit("2", "3", "1", "2026-01-02")}, "1", "1", "1", "1"},
@@ -26,7 +26,7 @@ func TestAnalysisPurchaseRules(t *testing.T) {
 		{"future excluded", []operations.Operation{analysisTrade("1", "buy", "A", "2", "200", "2026-01-01"), analysisTrade("2", "buy", "A", "1", "500", "2027-01-01")}, "2", "200", "100", "200"},
 		{"numeric ID latest buy", []operations.Operation{analysisTrade("10", "buy", "A", "1", "120", "2026-01-01"), analysisTrade("2", "buy", "A", "1", "100", "2026-01-01")}, "2", "240", "110", "220"},
 		{"half up", []operations.Operation{analysisTrade("1", "buy", "A", "1", "1.005", "2026-01-01")}, "1", "1.01", "1.01", "1.01"},
-		{"negative half up", []operations.Operation{analysisTrade("1", "buy", "A", "1", "1.005", "2026-01-01"), analysisTrade("2", "sell", "A", "2", "5", "2026-01-02")}, "-1", "-1.01", "1.01", "-1.01"},
+		{"negative half up", []operations.Operation{analysisTrade("1", "buy", "A", "1", "1.005", "2026-01-01"), analysisTrade("2", "sell", "A", "2", "5", "2026-01-02")}, "-1", "-2.5", "1.01", "-1.01"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -56,7 +56,7 @@ func TestAnalysisDistributionAndMissingPrices(t *testing.T) {
 	}
 	ops = append(ops, analysisTrade("4", "sell", "C", "1", "999", "2026-01-02"))
 	out, err = BuildAnalysis(AnalysisSnapshot{Operations: ops}, "1", "2026-01-02")
-	if err != nil || out.Complete || !out.Negative || out.Total != "" || len(out.Issues) != 1 || out.Assets[0].Percent != "" {
+	if err != nil || !out.Complete || !out.Negative || out.Total != "-997" || len(out.Issues) != 0 || out.Assets[0].Percent != "" {
 		t.Fatal(out, err)
 	}
 	empty, err := BuildAnalysis(AnalysisSnapshot{}, "1", "2026-01-01")

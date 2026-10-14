@@ -8,4 +8,6 @@ export function GetCurrencyRate(arg1:desktop.CurrencyPairDTO):Promise<desktop.Cu
 
 export function ListCurrencies():Promise<Array<string>>;
 
+export function ListCurrencyRates():Promise<Array<desktop.SaveCurrencyRateDTO>>;
+
 export function SaveCurrencyRate(arg1:desktop.SaveCurrencyRateDTO):Promise<void>;

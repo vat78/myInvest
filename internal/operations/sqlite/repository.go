@@ -339,6 +339,15 @@ func (r *Repository) ReadHistory(ctx context.Context, pid, date string) (string,
 		return "", nil, err
 	}
 	defer tx.Rollback()
+	code, ops, err := ReadHistoryInTransaction(ctx, tx, pid, date)
+	if err != nil {
+		return "", nil, err
+	}
+	return code, ops, tx.Commit()
+}
+
+// ReadHistoryInTransaction borrows the caller's snapshot; it never commits it.
+func ReadHistoryInTransaction(ctx context.Context, tx *sql.Tx, pid, date string) (string, []operations.Operation, error) {
 	reader := &Repository{q: tx}
 	code, err := reader.PortfolioCurrency(ctx, pid)
 	if err != nil {
@@ -362,5 +371,5 @@ func (r *Repository) ReadHistory(ctx context.Context, pid, date string) (string,
 	if err != nil {
 		return "", nil, err
 	}
-	return code, ops, tx.Commit()
+	return code, ops, nil
 }

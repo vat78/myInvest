@@ -71,3 +71,20 @@ func (s *Repository) SaveRates(ctx context.Context, direct, inverse currency.Rat
 	}
 	return nil
 }
+
+func (s *Repository) ListRates(ctx context.Context) ([]currency.Rate, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT date,base,quote,value FROM currency_rates ORDER BY date DESC,base,quote")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []currency.Rate{}
+	for rows.Next() {
+		var r currency.Rate
+		if err := rows.Scan(&r.Date, &r.Base, &r.Quote, &r.Value); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
