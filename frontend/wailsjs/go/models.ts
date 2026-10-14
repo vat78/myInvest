@@ -1,14 +1,14 @@
 export namespace desktop {
-	
+
 	export class AssetDTO {
 	    id: string;
 	    ticker: string;
 	    typeCode: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new AssetDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -19,11 +19,11 @@ export namespace desktop {
 	export class AssetInputDTO {
 	    ticker: string;
 	    typeCode: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new AssetInputDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.ticker = source["ticker"];
@@ -34,18 +34,18 @@ export namespace desktop {
 	    asset: AssetDTO;
 	    errors: Record<string, string>;
 	    message: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new AssetResultDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.asset = this.convertValues(source["asset"], AssetDTO);
 	        this.errors = source["errors"];
 	        this.message = source["message"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -67,11 +67,11 @@ export namespace desktop {
 	export class AssetTypeDTO {
 	    code: string;
 	    name: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new AssetTypeDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.code = source["code"];
@@ -81,11 +81,11 @@ export namespace desktop {
 	export class AssetTypeInputDTO {
 	    id: string;
 	    typeCode: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new AssetTypeInputDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -114,11 +114,11 @@ export namespace desktop {
 	    quantityBefore: string;
 	    quantityAfter: string;
 	    reverseSplit: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CashFlowDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -151,11 +151,11 @@ export namespace desktop {
 	    amount: string;
 	    portfolioAmount: string;
 	    comment: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CashFlowInputDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.kind = source["kind"];
@@ -169,11 +169,11 @@ export namespace desktop {
 	export class CashRateDTO {
 	    rate: string;
 	    errors: Record<string, string>;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CashRateDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.rate = source["rate"];
@@ -183,11 +183,11 @@ export namespace desktop {
 	export class CashResultDTO {
 	    errors: Record<string, string>;
 	    message: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CashResultDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.errors = source["errors"];
@@ -197,11 +197,11 @@ export namespace desktop {
 	export class CashWarningDTO {
 	    date: string;
 	    balance: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CashWarningDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.date = source["date"];
@@ -214,11 +214,11 @@ export namespace desktop {
 	    ticker: string;
 	    available: string;
 	    quantity: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new WarningDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.operationID = source["operationID"];
@@ -235,11 +235,11 @@ export namespace desktop {
 	    operations: CashFlowDTO[];
 	    warnings: WarningDTO[];
 	    cashWarnings: CashWarningDTO[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CashSnapshotDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.currencyCode = source["currencyCode"];
@@ -249,7 +249,7 @@ export namespace desktop {
 	        this.warnings = this.convertValues(source["warnings"], WarningDTO);
 	        this.cashWarnings = this.convertValues(source["cashWarnings"], CashWarningDTO);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -268,16 +268,16 @@ export namespace desktop {
 		    return a;
 		}
 	}
-	
+
 	export class CurrencyPairDTO {
 	    date: string;
 	    base: string;
 	    quote: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CurrencyPairDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.date = source["date"];
@@ -289,11 +289,11 @@ export namespace desktop {
 	    displayValue: string;
 	    value: string;
 	    found: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CurrencyRateDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.displayValue = source["displayValue"];
@@ -306,11 +306,11 @@ export namespace desktop {
 	    name: string;
 	    openedOn: string;
 	    currencyCode: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new PortfolioDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -323,11 +323,11 @@ export namespace desktop {
 	    name: string;
 	    openedOn: string;
 	    currencyCode: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new PortfolioInputDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -340,11 +340,11 @@ export namespace desktop {
 	    base: string;
 	    quote: string;
 	    value: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SaveCurrencyRateDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.date = source["date"];
@@ -357,18 +357,18 @@ export namespace desktop {
 	    portfolio: PortfolioDTO;
 	    errors: Record<string, string>;
 	    message: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SavePortfolioResultDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.portfolio = this.convertValues(source["portfolio"], PortfolioDTO);
 	        this.errors = source["errors"];
 	        this.message = source["message"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -393,11 +393,11 @@ export namespace desktop {
 	    oldUnits: string;
 	    newUnits: string;
 	    comment: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SplitInputDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.date = source["date"];
@@ -412,11 +412,11 @@ export namespace desktop {
 	    quantityAfter: string;
 	    errors: Record<string, string>;
 	    message: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SplitPreviewDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.quantityBefore = source["quantityBefore"];
@@ -433,11 +433,11 @@ export namespace desktop {
 	    amount: string;
 	    expenses: string;
 	    comment: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new TradeInputDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.kind = source["kind"];
@@ -454,11 +454,11 @@ export namespace desktop {
 	    rounded: boolean;
 	    moneyChange: string;
 	    errors: Record<string, string>;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new TradePreviewDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.averagePrice = source["averagePrice"];
@@ -471,14 +471,14 @@ export namespace desktop {
 }
 
 export namespace main {
-	
+
 	export class AppInfo {
 	    name: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new AppInfo(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -488,6 +488,77 @@ export namespace main {
 }
 
 export namespace valuation {
+
+	export class AnalysisAsset {
+	    id: string;
+	    ticker: string;
+	    quantity: string;
+	    currentValue: string;
+	    percent: string;
+	    averagePrice: string;
+	    averageValue: string;
+	    chartValue: string;
+
+	    static createFrom(source: any = {}) {
+	        return new AnalysisAsset(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.ticker = source["ticker"];
+	        this.quantity = source["quantity"];
+	        this.currentValue = source["currentValue"];
+	        this.percent = source["percent"];
+	        this.averagePrice = source["averagePrice"];
+	        this.averageValue = source["averageValue"];
+	        this.chartValue = source["chartValue"];
+	    }
+	}
+	export class Analysis {
+	    portfolioID: string;
+	    currency: string;
+	    date: string;
+	    total: string;
+	    complete: boolean;
+	    negative: boolean;
+	    assets: AnalysisAsset[];
+	    issues: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new Analysis(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.portfolioID = source["portfolioID"];
+	        this.currency = source["currency"];
+	        this.date = source["date"];
+	        this.total = source["total"];
+	        this.complete = source["complete"];
+	        this.negative = source["negative"];
+	        this.assets = this.convertValues(source["assets"], AnalysisAsset);
+	        this.issues = source["issues"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 
 	export class Group {
 	    code: string;

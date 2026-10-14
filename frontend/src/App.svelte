@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Allocation from './Allocation.svelte';
+  import PortfolioAnalysis from './PortfolioAnalysis.svelte';
+  let analysisRevision = $state(0);
   import ValueHistory from './ValueHistory.svelte';
   import { GetOverview } from '../wailsjs/go/desktop/OverviewAPI';
   let overview = $state<Awaited<ReturnType<typeof GetOverview>> | null>(null);
@@ -8,6 +10,7 @@
   let overviewRequest = 0;
   let tab = $state('overview');
   async function refreshOverview() {
+    analysisRevision++;
     const request = ++overviewRequest, day = localDate(); overviewLoading = true; overviewError = '';
     try { const result = await GetOverview(day); if (alive && request === overviewRequest && day === localDate()) overview = result; }
     catch { if (alive && request === overviewRequest) overviewError = 'Не удалось обновить обзор. Показанные ранее данные устарели.'; }
@@ -15,7 +18,9 @@
   }
   function tabKeys(event: KeyboardEvent) {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-    event.preventDefault(); tab = event.key === 'Home' ? 'overview' : event.key === 'End' ? 'operations' : tab === 'overview' ? 'operations' : 'overview';
+    event.preventDefault();
+    const tabs = ['overview', 'operations', 'analysis'];
+    tab = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[2] : tabs[(tabs.indexOf(tab) + (event.key === 'ArrowRight' ? 1 : 2)) % tabs.length];
     document.getElementById(`tab-${tab}`)?.focus();
   }
   import { formatDecimal, formatChartAmount } from './decimal-format.mjs';
@@ -165,6 +170,7 @@
   <div class="tabs" role="tablist" aria-label="Основные разделы">
     <button id="tab-overview" role="tab" aria-selected={tab === 'overview'} aria-controls="panel-overview" tabindex={tab === 'overview' ? 0 : -1} onclick={() => tab = 'overview'} onkeydown={tabKeys}>Обзор</button>
     <button id="tab-operations" role="tab" aria-selected={tab === 'operations'} aria-controls="panel-operations" tabindex={tab === 'operations' ? 0 : -1} onclick={() => tab = 'operations'} onkeydown={tabKeys}>Операции</button>
+    <button id="tab-analysis" role="tab" aria-selected={tab === 'analysis'} aria-controls="panel-analysis" tabindex={tab === 'analysis' ? 0 : -1} onclick={() => tab = 'analysis'} onkeydown={tabKeys}>Анализ</button>
   </div>
   <div class="panel" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" hidden={tab !== 'overview'} tabindex="0">
     {#if overview}
@@ -180,6 +186,9 @@
   <div class="panel" id="panel-operations" role="tabpanel" aria-labelledby="tab-operations" hidden={tab !== 'operations'} tabindex="0">
     <p class="hint">Баланс журнала учитывает всю введённую историю, включая будущие операции.</p>
     <CashFlowManager bind:this={cashManager} revision={portfolioRevision} onchanged={() => void refreshOverview()} oncreate={() => portfolioManager.openList()} onaddasset={trigger => void assetManager.openList(trigger)} />
+  </div>
+  <div class="panel" id="panel-analysis" role="tabpanel" aria-labelledby="tab-analysis" hidden={tab !== 'analysis'} tabindex="0">
+    <PortfolioAnalysis revision={analysisRevision} />
   </div>
 </main>
 

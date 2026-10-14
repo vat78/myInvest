@@ -5,3 +5,7 @@
 export function GetOverview(arg1) {
   return window['go']['desktop']['OverviewAPI']['GetOverview'](arg1);
 }
+
+export function GetPortfolioAnalysis(arg1, arg2) {
+  return window['go']['desktop']['OverviewAPI']['GetPortfolioAnalysis'](arg1, arg2);
+}

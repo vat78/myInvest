@@ -3,3 +3,5 @@
 import {valuation} from '../models';
 
 export function GetOverview(arg1:string):Promise<valuation.Overview>;
+
+export function GetPortfolioAnalysis(arg1:string,arg2:string):Promise<valuation.Analysis>;

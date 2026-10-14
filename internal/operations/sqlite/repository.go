@@ -331,3 +331,36 @@ func (r *Repository) UpdateAssetType(ctx context.Context, id, typeCode string) (
 	}
 	return out, err
 }
+
+// ReadHistory reads one portfolio and its history on a consistent, read-only snapshot.
+func (r *Repository) ReadHistory(ctx context.Context, pid, date string) (string, []operations.Operation, error) {
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return "", nil, err
+	}
+	defer tx.Rollback()
+	reader := &Repository{q: tx}
+	code, err := reader.PortfolioCurrency(ctx, pid)
+	if err != nil {
+		return "", nil, err
+	}
+	rows, err := tx.QueryContext(ctx, "SELECT "+reader.selection()+"WHERE o.portfolio_id=? AND o.date<=? ORDER BY o.date,o.id", pid, date)
+	if err != nil {
+		return "", nil, err
+	}
+	ops := []operations.Operation{}
+	for rows.Next() {
+		op, err := scan(rows)
+		if err != nil {
+			rows.Close()
+			return "", nil, err
+		}
+		ops = append(ops, op)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return "", nil, err
+	}
+	return code, ops, tx.Commit()
+}
