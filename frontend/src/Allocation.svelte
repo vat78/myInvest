@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { echarts, colors, coordinate } from './charts';
-  import { formatDecimal } from './decimal-format.mjs';
+  import { formatDecimal, formatChartAmount } from './decimal-format.mjs';
   import type { valuation } from '../wailsjs/go/models';
   let { summary, currency }: { summary: valuation.Summary; currency: string } = $props();
   let root: HTMLDivElement;
@@ -13,7 +13,7 @@
     if (!drawable) return;
     chart.setOption({ animation: false, tooltip: { trigger: 'item', renderMode: 'richText', formatter: (p: unknown) => {
       const index = (p as { dataIndex: number }).dataIndex;
-      const g = summary.groups[index]; return `${g.name}\n${formatDecimal(g.value)} ${currency}\n${formatDecimal(g.percent)}%`;
+      const g = summary.groups[index]; return `${g.name}\n${formatChartAmount(g.value)} ${currency}\n${formatDecimal(g.percent)}%`;
     } }, series: [{ type: 'pie', radius: ['38%', '76%'], label: { show: false }, data: summary.groups.map(g => ({ name: g.name, value: coordinate(g.percent), itemStyle: { color: colors[g.code] } })) }] });
   }
   $effect(() => { void summary; void drawable; void currency; render(); });
@@ -28,10 +28,10 @@
   {#if !summary.complete}<p class="warning">Оценка неполная</p>
   {:else if summary.negative}<p class="warning">Есть отрицательные остатки. Проверьте полноту истории; доли не показаны.</p>
   {:else if !summary.groups.length}<p class="hint">Нет данных для распределения</p>
-  {:else if !drawable}<p class="warning">Значения выходят за диапазон графика. Точные суммы приведены ниже.</p>{/if}
+  {:else if !drawable}<p class="warning">Значения выходят за диапазон графика. Суммы приведены ниже с округлением до двух знаков.</p>{/if}
   <ul aria-label="Стоимость по типам активов">
     {#each summary.groups as g (g.code)}
-      <li><span class="dot" style:background={colors[g.code]}></span><span>{g.name}</span><strong>{formatDecimal(g.value)} {currency}{g.percent ? ` · ${formatDecimal(g.percent)}%` : ''}</strong></li>
+      <li><span class="dot" style:background={colors[g.code]}></span><span>{g.name}</span><strong>{formatChartAmount(g.value)} {currency}{g.percent ? ` · ${formatDecimal(g.percent)}%` : ''}</strong></li>
     {/each}
   </ul>
   {#if drawable}<p class="hint">Проценты округлены; их сумма может отличаться от 100%.</p>{/if}
