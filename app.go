@@ -17,10 +17,14 @@ import (
 	portfoliodesktop "myinvest/internal/portfolio/desktop"
 	portfoliosqlite "myinvest/internal/portfolio/sqlite"
 	"myinvest/internal/storage/sqlite"
+	"myinvest/internal/valuation"
+	valuationdesktop "myinvest/internal/valuation/desktop"
+	valuationsqlite "myinvest/internal/valuation/sqlite"
 	"myinvest/migrations"
 )
 
 type App struct {
+	overview   *valuationdesktop.OverviewAPI
 	cashFlows  *operationsdesktop.CashFlowAPI
 	ready      chan struct{}
 	mu         sync.Mutex
@@ -46,6 +50,9 @@ func newApp() *App {
 	})
 	a.cashFlows = operationsdesktop.NewAPI(func(fn func(*operations.Service) error) error {
 		return a.withStorage(func(db *sql.DB) error { return fn(operations.NewService(operationssqlite.NewRepository(db))) })
+	})
+	a.overview = valuationdesktop.NewAPI(func(fn func(*valuation.Service) error) error {
+		return a.withStorage(func(db *sql.DB) error { return fn(valuation.NewService(valuationsqlite.NewRepository(db))) })
 	})
 	return a
 }

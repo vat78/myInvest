@@ -6,7 +6,7 @@
   import ActionIcon from './ActionIcon.svelte';
   import { formatDecimal } from './decimal-format.mjs';
   import { localDate } from './calendar';
-  let { revision = 0, oncreate, onaddasset }: { revision?: number; oncreate: () => void; onaddasset: (trigger: HTMLButtonElement) => void } = $props();
+  let { revision = 0, oncreate, onaddasset, onchanged = () => {} }: { revision?: number; onchanged?: () => void; oncreate: () => void; onaddasset: (trigger: HTMLButtonElement) => void } = $props();
   type Portfolio = Awaited<ReturnType<typeof ListPortfolios>>[number];
   type Snapshot = Awaited<ReturnType<typeof ListCashFlows>>;
   type Operation = Snapshot['operations'][number];
@@ -154,7 +154,7 @@
     if (!alive || pid !== selected) return;
     errors = result.errors; message = result.message;
     if (!message && !Object.keys(errors).length) {
-      close(); await load();
+      onchanged(); close(); await load();
       await tick(); if (alive && !editing && !deleting) (returnTo?.isConnected ? returnTo : root?.querySelector<HTMLButtonElement>(`[data-cash-id="${savedID}"]`) ?? portfolioSelect)?.focus();
     } else {
       await tick(); form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
@@ -178,7 +178,7 @@
     if (!alive || pid !== selected) return;
     message = result.message;
     if (!message) {
-      closeDelete(); await load(); await tick();
+      onchanged(); closeDelete(); await load(); await tick();
       if (alive && !editing && !deleting) portfolioSelect?.focus();
     }
   }

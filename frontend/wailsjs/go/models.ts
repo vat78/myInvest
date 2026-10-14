@@ -487,3 +487,159 @@ export namespace main {
 
 }
 
+export namespace valuation {
+
+	export class Group {
+	    code: string;
+	    name: string;
+	    value: string;
+	    percent: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Group(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.code = source["code"];
+	        this.name = source["name"];
+	        this.value = source["value"];
+	        this.percent = source["percent"];
+	    }
+	}
+	export class Summary {
+	    value: string;
+	    complete: boolean;
+	    negative: boolean;
+	    groups: Group[];
+	    issues: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new Summary(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.value = source["value"];
+	        this.complete = source["complete"];
+	        this.negative = source["negative"];
+	        this.groups = this.convertValues(source["groups"], Group);
+	        this.issues = source["issues"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Card {
+	    id: string;
+	    name: string;
+	    currency: string;
+	    rateDate: string;
+	    rate: string;
+	    summary: Summary;
+
+	    static createFrom(source: any = {}) {
+	        return new Card(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.currency = source["currency"];
+	        this.rateDate = source["rateDate"];
+	        this.rate = source["rate"];
+	        this.summary = this.convertValues(source["summary"], Summary);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+	export class Point {
+	    date: string;
+	    value: string;
+	    complete: boolean;
+	    issues: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new Point(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.date = source["date"];
+	        this.value = source["value"];
+	        this.complete = source["complete"];
+	        this.issues = source["issues"];
+	    }
+	}
+	export class Overview {
+	    date: string;
+	    total: Summary;
+	    portfolios: Card[];
+	    points: Point[];
+
+	    static createFrom(source: any = {}) {
+	        return new Overview(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.date = source["date"];
+	        this.total = this.convertValues(source["total"], Summary);
+	        this.portfolios = this.convertValues(source["portfolios"], Card);
+	        this.points = this.convertValues(source["points"], Point);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+
+}
