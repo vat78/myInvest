@@ -6,11 +6,13 @@
   let { points }: { points: valuation.Point[] } = $props();
   let root: HTMLDivElement;
   let chart: ReturnType<typeof echarts.init> | undefined;
+  // Axis ticks describe approximate chart coordinates, not exact portfolio values.
+  const axisAmount = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   function render() {
     if (!chart) return;
-    chart.setOption({ animation: false, grid: { left: 95, right: 24, top: 20, bottom: 85 },
+    chart.setOption({ animation: false, grid: { left: 24, right: 24, top: 20, bottom: 85, containLabel: true },
       tooltip: { trigger: 'axis', renderMode: 'richText', formatter: (params: unknown) => { const p = (params as { dataIndex: number }[])[0]; const point = points[p.dataIndex]; return `${point.date}\n${point.complete ? `${formatChartAmount(point.value)} RUB` : point.issues.join('\n')}`; } },
-      xAxis: { type: 'category', data: points.map(p => p.date) }, yAxis: { type: 'value', name: 'RUB' },
+      xAxis: { type: 'category', data: points.map(p => p.date) }, yAxis: { type: 'value', name: 'RUB', axisLabel: { formatter: (value: number) => axisAmount.format(value) } },
       dataZoom: [{ type: 'slider', bottom: 8 }, { type: 'inside' }],
       series: [{ type: 'line', connectNulls: false, showSymbol: points.length < 40, itemStyle: { color: '#219773' }, data: points.map(p => p.complete ? coordinate(p.value) : null) }] }, true);
   }

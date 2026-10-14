@@ -18,7 +18,7 @@
     event.preventDefault(); tab = event.key === 'Home' ? 'overview' : event.key === 'End' ? 'operations' : tab === 'overview' ? 'operations' : 'overview';
     document.getElementById(`tab-${tab}`)?.focus();
   }
-  import { formatDecimal } from './decimal-format.mjs';
+  import { formatDecimal, formatChartAmount } from './decimal-format.mjs';
   import PortfolioManager from './PortfolioManager.svelte';
   import CashFlowManager from './CashFlowManager.svelte';
   import AssetManager from './AssetManager.svelte';
@@ -155,7 +155,7 @@
   <section class="hero" aria-label="Сводка инвестиций">
     <div class="brand"><span class="eyebrow">Личный учёт инвестиций</span><h1>myInvest</h1><p>Ваши инвестиции. Ваши данные.</p><p class="hint">Оценка по последним сделкам на {overview?.date ?? today}. Совокупные итоги в RUB.</p></div>
     <div class="total"><h2>Структура всех портфелей</h2>
-      {#if overview}<strong class="total-value">{overview.total.complete ? `${formatDecimal(overview.total.value)} RUB` : 'Оценка неполная'}</strong><Allocation summary={overview.total} currency="RUB" />{/if}
+      {#if overview}<strong class="total-value">{overview.total.complete ? `${formatChartAmount(overview.total.value)} RUB` : 'Оценка неполная'}</strong><Allocation summary={overview.total} currency="RUB" />{/if}
     </div>
   </section>
   {#if mainError}<p class="error" role="alert">{mainError}</p>{/if}
@@ -172,7 +172,7 @@
       <article class="history-card"><h2>Совокупная стоимость всех портфелей</h2><p class="hint">На конец каждого дня · RUB · оценка по сделкам</p>
         {#if overview.points.length}<ValueHistory points={overview.points} />{:else}<p>Нет истории операций до сегодняшней даты.</p>{/if}
       </article>
-      <div class="portfolios">{#each overview.portfolios as p (p.id)}<article class="portfolio-card"><h2>{p.name}</h2><strong class="total-value">{p.summary.complete ? `${formatDecimal(p.summary.value)} ${p.currency}` : 'Оценка неполная'}</strong><Allocation summary={p.summary} currency={p.currency} />
+      <div class="portfolios">{#each overview.portfolios as p (p.id)}<article class="portfolio-card"><h2>{p.name}</h2><strong class="total-value">{p.summary.complete ? `${formatChartAmount(p.summary.value)} ${p.currency}` : 'Оценка неполная'}</strong><Allocation summary={p.summary} currency={p.currency} />
         {#if p.currency !== 'RUB'}<p class="hint">{p.rate ? `Для совокупной оценки: 1 ${p.currency} = ${formatDecimal(p.rate)} RUB · курс от ${p.rateDate}` : `Курс ${p.currency} → RUB отсутствует`}</p>{/if}
       </article>{/each}</div>
     {/if}
