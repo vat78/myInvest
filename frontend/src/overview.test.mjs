@@ -41,14 +41,15 @@ test('keyboard tab switching chooses the matching panel and restores tab focus',
   h.keys({key:'ArrowRight',preventDefault(){}}); assert.equal(h.tab,'analysis'); assert.equal(sandbox.focused,'tab-analysis');
   h.keys({key:'ArrowRight',preventDefault(){}}); assert.equal(h.tab,'quotes');
   h.keys({key:'ArrowRight',preventDefault(){}}); assert.equal(h.tab,'benchmarks');
+  h.keys({key:'ArrowRight',preventDefault(){}}); assert.equal(h.tab,'planning'); assert.equal(sandbox.focused,'tab-planning');
   h.keys({key:'ArrowRight',preventDefault(){}}); assert.equal(h.tab,'overview');
-  h.keys({key:'End',preventDefault(){}}); assert.equal(h.tab,'benchmarks');
+  h.keys({key:'End',preventDefault(){}}); assert.equal(h.tab,'planning');
   h.keys({key:'Home',preventDefault(){}}); assert.equal(h.tab,'overview'); assert.equal(sandbox.focused,'tab-overview');
 });
 
-test('five tabs wrap in both directions and End selects benchmarks', () => {
+test('six tabs wrap in both directions and End selects financial plan', () => {
  const {h,sandbox}=harness(async()=>({}));
- h.keys({key:'ArrowLeft',preventDefault(){}});assert.equal(h.tab,'benchmarks');assert.equal(sandbox.focused,'tab-benchmarks');
+ h.keys({key:'ArrowLeft',preventDefault(){}});assert.equal(h.tab,'planning');assert.equal(sandbox.focused,'tab-planning');
  h.keys({key:'ArrowRight',preventDefault(){}});assert.equal(h.tab,'overview');
- h.keys({key:'End',preventDefault(){}});assert.equal(h.tab,'benchmarks');
+ h.keys({key:'End',preventDefault(){}});assert.equal(h.tab,'planning');
 });

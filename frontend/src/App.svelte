@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Allocation from './Allocation.svelte';
+  import FinancialPlan from './FinancialPlan.svelte';
   import PortfolioAnalysis from './PortfolioAnalysis.svelte';
   let analysisRevision = $state(0);
   import ValueHistory from './ValueHistory.svelte';
@@ -18,7 +19,7 @@
   }
   function tabKeys(event: KeyboardEvent) {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-    const tabs = ['overview', 'operations', 'analysis', 'quotes', 'benchmarks'];
+    const tabs = ['overview', 'operations', 'analysis', 'quotes', 'benchmarks', 'planning'];
     event.preventDefault();
     const step = event.key === 'ArrowLeft' ? -1 : 1;
     tab = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[tabs.length - 1] : tabs[(tabs.indexOf(tab) + step + tabs.length) % tabs.length];
@@ -183,6 +184,7 @@
     <button id="tab-analysis" role="tab" aria-selected={tab === 'analysis'} aria-controls="panel-analysis" tabindex={tab === 'analysis' ? 0 : -1} onclick={() => tab = 'analysis'} onkeydown={tabKeys}>Анализ</button>
     <button id="tab-quotes" role="tab" aria-selected={tab === 'quotes'} aria-controls="panel-quotes" tabindex={tab === 'quotes' ? 0 : -1} onclick={() => tab = 'quotes'} onkeydown={tabKeys}>Котировки</button>
     <button id="tab-benchmarks" role="tab" aria-selected={tab === 'benchmarks'} aria-controls="panel-benchmarks" tabindex={tab === 'benchmarks' ? 0 : -1} onclick={() => tab = 'benchmarks'} onkeydown={tabKeys}>Бенчмарки</button>
+    <button id="tab-planning" role="tab" aria-selected={tab === 'planning'} aria-controls="panel-planning" tabindex={tab === 'planning' ? 0 : -1} onclick={() => tab = 'planning'} onkeydown={tabKeys}>Финансовый план</button>
   </div>
   <div class="panel" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" hidden={tab !== 'overview'} tabindex="0">
     {#if overview}
@@ -207,6 +209,9 @@
   </div>
   <div class="panel" id="panel-benchmarks" role="tabpanel" aria-labelledby="tab-benchmarks" hidden={tab !== 'benchmarks'} tabindex="0">
     <BenchmarkManager revision={analysisRevision} />
+  </div>
+  <div class="panel" id="panel-planning" role="tabpanel" aria-labelledby="tab-planning" hidden={tab !== 'planning'} tabindex="0">
+    <FinancialPlan revision={quoteRevision} active={tab === 'planning'} />
   </div>
 </main>
 
