@@ -298,6 +298,10 @@ func Build(s Snapshot, date string) (Overview, error) {
 			}
 		}
 	}
+	// Quotes, FX, splits and persisted snapshots are the only valuation events.
+	// Cache complete totals between events; incomplete issues include the requested
+	// date, so keep evaluating those points to preserve their diagnostic text.
+	changes := valuationDates(s, date)
 	total, cards, err := at(prepared, rates, prices, date, true)
 	if err != nil {
 		return out, err
@@ -310,8 +314,17 @@ func Build(s Snapshot, date string) (Overview, error) {
 		}
 		start, _ := time.Parse("2006-01-02", first)
 		end, _ := time.Parse("2006-01-02", date)
+		var cachedPoint Point
+		cachedChange := -1
 		for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
 			day := d.Format("2006-01-02")
+			change := sort.Search(len(changes), func(i int) bool { return changes[i] > day })
+			if change == cachedChange && cachedPoint.Complete {
+				point := cachedPoint
+				point.Date = day
+				out.Points = append(out.Points, point)
+				continue
+			}
 			a, _, err := at(prepared, rates, prices, day, false)
 			if err != nil {
 				return out, err
@@ -342,8 +355,42 @@ func Build(s Snapshot, date string) (Overview, error) {
 			if point.Complete {
 				point.Value = Format(a.total, 18)
 			}
+			cachedPoint, cachedChange = point, change
 			out.Points = append(out.Points, point)
 		}
 	}
 	return out, nil
+}
+
+// valuationDates includes all inputs that can change valuation or deposit totals.
+func valuationDates(s Snapshot, date string) []string {
+	unique := map[string]struct{}{}
+	add := func(d string) {
+		if d <= date {
+			unique[d] = struct{}{}
+		}
+	}
+	for _, p := range s.Portfolios {
+		for _, d := range p.Days {
+			add(d.Date)
+		}
+	}
+	for _, q := range s.Pricing.Quotes {
+		add(q.Date)
+	}
+	for _, r := range s.Pricing.FX {
+		add(r.Date)
+	}
+	for _, split := range s.Pricing.Splits {
+		add(split.Date)
+	}
+	for _, r := range s.Rates {
+		add(r.Date)
+	}
+	dates := make([]string, 0, len(unique))
+	for d := range unique {
+		dates = append(dates, d)
+	}
+	sort.Strings(dates)
+	return dates
 }

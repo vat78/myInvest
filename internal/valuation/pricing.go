@@ -20,9 +20,17 @@ type splitFactor struct {
 	date   string
 	factor *big.Rat
 }
+type indexedQuote struct {
+	quotes.Quote
+	value *big.Rat
+}
+type indexedRate struct {
+	ExchangeRate
+	value *big.Rat
+}
 type priceIndex struct {
-	quotes map[string][]quotes.Quote
-	fx     map[string][]ExchangeRate
+	quotes map[string][]indexedQuote
+	fx     map[string][]indexedRate
 	splits map[string][]splitFactor
 }
 type selectedPrice struct {
@@ -33,7 +41,7 @@ type selectedPrice struct {
 
 func priceKey(a, b string) string { return a + "\x00" + b }
 func preparePrices(p Pricing) (*priceIndex, error) {
-	idx := &priceIndex{quotes: map[string][]quotes.Quote{}, fx: map[string][]ExchangeRate{}, splits: map[string][]splitFactor{}}
+	idx := &priceIndex{quotes: map[string][]indexedQuote{}, fx: map[string][]indexedRate{}, splits: map[string][]splitFactor{}}
 	for _, q := range p.Quotes {
 		v, err := decimal(q.Price)
 		if err != nil || v.Sign() <= 0 {
@@ -42,7 +50,7 @@ func preparePrices(p Pricing) (*priceIndex, error) {
 		if err := ValidateDate(q.Date); err != nil {
 			return nil, err
 		}
-		idx.quotes[q.AssetID] = append(idx.quotes[q.AssetID], q)
+		idx.quotes[q.AssetID] = append(idx.quotes[q.AssetID], indexedQuote{q, v})
 	}
 	for _, list := range idx.quotes {
 		sort.Slice(list, func(i, j int) bool {
@@ -61,7 +69,7 @@ func preparePrices(p Pricing) (*priceIndex, error) {
 			return nil, err
 		}
 		k := priceKey(f.Base, f.Quote)
-		idx.fx[k] = append(idx.fx[k], f)
+		idx.fx[k] = append(idx.fx[k], indexedRate{f, v})
 	}
 	for _, list := range idx.fx {
 		sort.Slice(list, func(i, j int) bool { return list[i].Date < list[j].Date })
@@ -118,10 +126,7 @@ func (idx *priceIndex) choose(pid, asset, currency, date, tradeDate string, trad
 	if tradePrice != nil && day < tradeDate {
 		return out, nil
 	}
-	price, err := decimal(chosen.Price)
-	if err != nil {
-		return out, err
-	}
+	price := new(big.Rat).Set(chosen.value)
 	out = selectedPrice{Source: "quote", Date: day, Currency: chosen.CurrencyCode, value: price}
 	factors := idx.splits[priceKey(pid, asset)]
 	out.value.Mul(out.value, new(big.Rat).Quo(factorAt(factors, date), factorAt(factors, day)))
@@ -134,11 +139,7 @@ func (idx *priceIndex) choose(pid, asset, currency, date, tradeDate string, trad
 			return out, nil
 		}
 		rate := rates[i]
-		mult, err := decimal(rate.Value)
-		if err != nil {
-			return out, err
-		}
-		out.value.Mul(out.value, mult)
+		out.value.Mul(out.value, rate.value)
 		out.Rate = rate.Value
 		out.RateDate = rate.Date
 	}
