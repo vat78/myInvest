@@ -118,7 +118,7 @@ func TestDividendMigrationPreservesHistoryAndConstraints(t *testing.T) {
 	}
 	for _, name := range names {
 		version, _ := strconv.Atoi(name[:4])
-		if version >= 15 {
+		if version >= 13 {
 			continue
 		}
 		data, err := fs.ReadFile(migrations.Files, name)

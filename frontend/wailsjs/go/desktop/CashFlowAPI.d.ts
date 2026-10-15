@@ -20,10 +20,10 @@ export function PreviewTrade(arg1:string,arg2:string,arg3:string,arg4:string):Pr
 
 export function SaveCashFlow(arg1:string,arg2:string,arg3:desktop.CashFlowInputDTO):Promise<desktop.CashResultDTO>;
 
+export function SaveDividend(arg1:string,arg2:string,arg3:desktop.DividendInputDTO):Promise<desktop.CashResultDTO>;
+
 export function SaveSplit(arg1:string,arg2:string,arg3:desktop.SplitInputDTO):Promise<desktop.CashResultDTO>;
 
 export function SaveTrade(arg1:string,arg2:string,arg3:desktop.TradeInputDTO):Promise<desktop.CashResultDTO>;
 
 export function UpdateAssetType(arg1:desktop.AssetTypeInputDTO):Promise<desktop.AssetResultDTO>;
-
-export function SaveDividend(arg1:string,arg2:string,arg3:{date:string;assetID:string;amount:string;comment:string}):Promise<desktop.CashResultDTO>;
