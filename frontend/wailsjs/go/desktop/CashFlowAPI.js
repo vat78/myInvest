@@ -49,3 +49,7 @@ export function SaveTrade(arg1, arg2, arg3) {
 export function UpdateAssetType(arg1) {
   return window['go']['desktop']['CashFlowAPI']['UpdateAssetType'](arg1);
 }
+
+export function SaveDividend(arg1, arg2, arg3) {
+  return window['go']['desktop']['CashFlowAPI']['SaveDividend'](arg1, arg2, arg3);
+}

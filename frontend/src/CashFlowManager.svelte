@@ -2,7 +2,7 @@
   import { onDestroy, tick } from 'svelte';
   import { ListPortfolios } from '../wailsjs/go/desktop/PortfolioAPI';
   import { ListCurrencies } from '../wailsjs/go/desktop/API';
-  import { ListCashFlows, SaveCashFlow, DeleteCashFlow, PreviewCashRate, SaveTrade, PreviewTrade, ListAssets, SaveSplit, PreviewSplit } from '../wailsjs/go/desktop/CashFlowAPI';
+  import { ListCashFlows, SaveCashFlow, DeleteCashFlow, PreviewCashRate, SaveTrade, PreviewTrade, ListAssets, SaveSplit, PreviewSplit, SaveDividend } from '../wailsjs/go/desktop/CashFlowAPI';
   import ActionIcon from './ActionIcon.svelte';
   import { formatDecimal } from './decimal-format.mjs';
   import { localDate } from './calendar';
@@ -43,15 +43,16 @@
   const isTrade = (k: string) => k === 'buy' || k === 'sell';
   let trade = $derived(isTrade(kind));
   let split = $derived(kind === 'split');
+  let dividend = $derived(kind === 'dividend');
   let oldUnits = $state('1'), newUnits = $state('10');
   let quantityBefore = $state(''), quantityAfter = $state(''), splitPreviewError = $state('');
   let splitRequest = 0;
   export async function assetAdded(asset: Awaited<ReturnType<typeof ListAssets>>[number]) {
-    if (!editing || (!isTrade(kind) && kind !== 'split')) return;
+    if (!editing || (!isTrade(kind) && kind !== 'split' && kind !== 'dividend')) return;
     assetID = asset.id; await loadAssets();
   }
   export async function refreshAssets() {
-    if (editing && isTrade(kind)) await loadAssets();
+    if (editing && (isTrade(kind) || split || dividend)) await loadAssets();
   }
   async function loadAssets() {
     const request = ++assetRequest; assetLoading = true; assetError = '';
@@ -69,7 +70,7 @@
   let portfolio = $derived(portfolios.find(p => p.id === selected));
   let different = $derived(currencyCode !== portfolio?.currencyCode);
   const display = formatDecimal;
-  const kindLabel = (k: string) => ({ deposit: 'Пополнение', withdrawal: 'Вывод', buy: 'Покупка', sell: 'Продажа', split: 'Сплит' }[k] ?? k);
+  const kindLabel = (k: string) => ({ deposit: 'Пополнение', withdrawal: 'Вывод', buy: 'Покупка', sell: 'Продажа', split: 'Сплит', dividend: 'Дивиденды' }[k] ?? k);
   const operationLabel = (op: Operation) => op.kind === 'split' ? (op.reverseSplit ? 'Обратный сплит' : 'Сплит') : kindLabel(op.kind);
   const signed = (value: string) => value.startsWith('-') || value === '0' ? display(value) : `+${display(value)}`;
   async function loadPortfolios() {
@@ -114,7 +115,7 @@
     quantityBefore = ''; quantityAfter = ''; splitPreviewError = '';
     price = ''; moneyChange = ''; previewError = '';
     errors = {}; message = ''; rate = ''; editing = true;
-    await tick(); form.showModal(); dateInput.focus(); if (isTrade(kind) || kind === 'split') void loadAssets(); else void loadCurrencies();
+    await tick(); form.showModal(); dateInput.focus(); if (isTrade(kind) || split || dividend) void loadAssets(); else void loadCurrencies();
   }
   function close() {
     if (busy) return;
@@ -123,7 +124,7 @@
   }
   function currencyChanged() { amount = ''; portfolioAmount = ''; errors = {}; }
   $effect(() => {
-    const a = amount, b = portfolioAmount, active = editing && different && !isTrade(kind) && kind !== 'split';
+    const a = amount, b = portfolioAmount, active = editing && different && !isTrade(kind) && kind !== 'split' && kind !== 'dividend';
     const request = ++rateRequest;
     rate = ''; rateError = '';
     if (!active || !a || !b) return;
@@ -137,12 +138,14 @@
   });
   async function save(event: SubmitEvent) {
     event.preventDefault();
-    if (busy || ((isTrade(kind) || kind === 'split') ? assetLoading || assetError : currencyLoading || currencyError)) return;
+    if (busy || ((isTrade(kind) || split || dividend) ? assetLoading || assetError : currencyLoading || currencyError)) return;
     const pid = selected, savedID = id;
     busy = true; message = ''; errors = {};
     let result: Awaited<ReturnType<typeof SaveCashFlow>>;
     try {
-      result = kind === 'split'
+      result = dividend
+        ? await SaveDividend(pid, id, { date, assetID, amount, comment })
+        : kind === 'split'
         ? await SaveSplit(pid, id, { date, assetID, oldUnits, newUnits, comment })
         : isTrade(kind)
         ? await SaveTrade(pid, id, { kind, date, assetID, quantity, amount, expenses, comment })
@@ -234,7 +237,7 @@
     {:else if snapshot}
       <p class="balance">{display(snapshot.balance)} {snapshot.currencyCode}</p>
       {#if snapshot.negative}<p class="warning" role="status">Остаток отрицательный. Проверьте полноту истории денежных операций.</p>{/if}
-      <div class="actions"><button class="primary" onclick={event => void open(null, 'deposit', event.currentTarget)}>Пополнить</button><button onclick={event => void open(null, 'withdrawal', event.currentTarget)}>Вывести</button><button onclick={event => void open(null, 'buy', event.currentTarget)}>Купить</button><button onclick={event => void open(null, 'sell', event.currentTarget)}>Продать</button><button onclick={event => void open(null, 'split', event.currentTarget)}>Сплит</button></div>
+      <div class="actions"><button class="primary" onclick={event => void open(null, 'deposit', event.currentTarget)}>Пополнить</button><button onclick={event => void open(null, 'withdrawal', event.currentTarget)}>Вывести</button><button onclick={event => void open(null, 'buy', event.currentTarget)}>Купить</button><button onclick={event => void open(null, 'sell', event.currentTarget)}>Продать</button><button onclick={event => void open(null, 'split', event.currentTarget)}>Сплит</button><button onclick={event => void open(null, 'dividend', event.currentTarget)}>Дивиденды</button></div>
       {#each snapshot.warnings ?? [] as warning (warning.operationID)}<p class="warning" role="status">{warning.date}: продажа {warning.ticker} сверх остатка — доступно {display(warning.available)}, продано {display(warning.quantity)}. Проверьте полноту истории.</p>{/each}
       {#each snapshot.cashWarnings ?? [] as warning (warning.date)}<p class="warning" role="status">{warning.date}: отрицательный денежный остаток на конец дня — {display(warning.balance)} {snapshot.currencyCode}. Проверьте полноту истории.</p>{/each}
       <h3>Журнал операций</h3>
@@ -250,6 +253,7 @@
             <div>Количество: {display(op.quantity)}</div><div>Сумма: {display(op.amount)} {snapshot.currencyCode}</div>
             <div>Средняя цена: {op.rounded ? '≈ ' : ''}{display(op.averagePrice)} {snapshot.currencyCode}{op.rounded ? ' (до 18 знаков)' : ''}</div>
             <div>Расходы: {display(op.expenses)} {snapshot.currencyCode}</div>
+          {:else if op.kind === 'dividend'}<div>Зачислено: {display(op.amount)} {snapshot.currencyCode}</div>
           {:else}<div>{display(op.amount)} {op.currencyCode} / {display(op.portfolioAmount)} {snapshot.currencyCode}</div>
             <div>Курс ≈ {display(op.rate)} {snapshot.currencyCode} за 1 {op.currencyCode}</div>{/if}
             <div class="comment">{op.comment}</div>
@@ -268,19 +272,23 @@
     <h2 id="cash-form-title">{id ? 'Редактировать операцию' : kindLabel(kind)}</h2>
     <p>{portfolio?.name} · {portfolio?.currencyCode}</p>
     <fieldset disabled={busy}>
-      <label for="cash-kind">Тип</label><select id="cash-kind" bind:value={kind} aria-invalid={!!errors.kind}>{#if split}<option value="split">Сплит</option>{:else if trade}<option value="buy">Покупка</option><option value="sell">Продажа</option>{:else}<option value="deposit">Пополнение</option><option value="withdrawal">Вывод</option>{/if}</select>
+      <label for="cash-kind">Тип</label><select id="cash-kind" bind:value={kind} aria-invalid={!!errors.kind}>{#if dividend}<option value="dividend">Дивиденды</option>{:else if split}<option value="split">Сплит</option>{:else if trade}<option value="buy">Покупка</option><option value="sell">Продажа</option>{:else}<option value="deposit">Пополнение</option><option value="withdrawal">Вывод</option>{/if}</select>
       {#if errors.kind}<p class="error" role="alert">{errors.kind}</p>{/if}
       <label for="cash-date">Дата</label><input id="cash-date" bind:this={dateInput} type="date" bind:value={date} aria-invalid={!!errors.date} aria-describedby={errors.date ? 'cash-date-error' : undefined} />
       {#if errors.date}<p id="cash-date-error" class="error" role="alert">{errors.date}</p>{/if}
-      {#if trade || split}
-        <label for="trade-asset">Актив</label><select id="trade-asset" bind:value={assetID} disabled={assetLoading || !!assetError} aria-invalid={!!errors.assetID} aria-describedby={errors.assetID ? 'trade-asset-error' : undefined}>
-          <option value="">Выберите актив</option>{#each assets as asset (asset.id)}<option value={asset.id}>{asset.ticker}</option>{/each}
+      {#if trade || split || dividend}
+        <label for="trade-asset">{dividend ? 'Актив (необязательно)' : 'Актив'}</label><select id="trade-asset" bind:value={assetID} disabled={assetLoading || !!assetError} aria-invalid={!!errors.assetID} aria-describedby={errors.assetID ? 'trade-asset-error' : undefined}>
+          <option value="">{dividend ? 'Без указания актива' : 'Выберите актив'}</option>{#each assets as asset (asset.id)}<option value={asset.id}>{asset.ticker}</option>{/each}
         </select>
         {#if assetLoading}<p role="status">Загрузка активов…</p>{/if}
         {#if assetError}<p class="error" role="alert">{assetError}</p><button type="button" onclick={() => void loadAssets()}>Повторить загрузку активов</button>{/if}
         {#if errors.assetID}<p id="trade-asset-error" class="error" role="alert">{errors.assetID}</p>{/if}
         <button type="button" onclick={event => onaddasset(event.currentTarget)}>Добавить актив</button>
-        {#if split}
+        {#if dividend}
+          <p class="hint">Фактически зачисленная сумма после удержаний. Актив можно не указывать.</p>
+          <label for="dividend-amount">Сумма дивидендов ({portfolio?.currencyCode})</label><input id="dividend-amount" inputmode="decimal" bind:value={amount} aria-invalid={!!errors.amount} aria-describedby={errors.amount ? 'dividend-amount-error' : undefined} />
+          {#if errors.amount}<p id="dividend-amount-error" class="error" role="alert">{errors.amount}</p>{/if}
+        {:else if split}
           <p class="hint">Сплит применяется в начале дня к остатку предыдущих дат. Сделки этой даты вводятся в новых единицах.</p>
           <label for="split-old">Старых акций</label><input id="split-old" inputmode="numeric" bind:value={oldUnits} aria-invalid={!!errors.oldUnits} aria-describedby={errors.oldUnits ? 'split-old-error' : undefined} />
           {#if errors.oldUnits}<p id="split-old-error" class="error" role="alert">{errors.oldUnits}</p>{/if}
@@ -317,12 +325,12 @@
       <label for="cash-comment">Комментарий</label><textarea id="cash-comment" bind:value={comment}></textarea>
     </fieldset>
     {#if message}<p class="error" role="alert">{message}</p>{/if}
-    <div class="actions"><button type="button" disabled={busy} onclick={close}>Отмена</button><button class="primary" type="submit" disabled={busy || (trade || split ? assetLoading || !!assetError : currencyLoading || !!currencyError)}>{busy ? 'Сохранение…' : 'Сохранить'}</button></div>
+    <div class="actions"><button type="button" disabled={busy} onclick={close}>Отмена</button><button class="primary" type="submit" disabled={busy || (trade || split || dividend ? assetLoading || !!assetError : currencyLoading || !!currencyError)}>{busy ? 'Сохранение…' : 'Сохранить'}</button></div>
   </form>
 </dialog>
 <dialog bind:this={confirmation} aria-labelledby="cash-delete-title" oncancel={event => { event.preventDefault(); closeDelete(); }}>
   <h2 id="cash-delete-title">Удалить операцию?</h2>
-  {#if deleting}<p>{portfolio?.name}: {operationLabel(deleting)}, {deleting.date}, {#if deleting.kind === 'split'}{deleting.ticker}, {display(deleting.oldUnits)} → {display(deleting.newUnits)}; количество {display(deleting.quantityBefore)} → {display(deleting.quantityAfter)}{:else if isTrade(deleting.kind)}{deleting.ticker}, {display(deleting.quantity)} ед., {display(deleting.amount)} {portfolio?.currencyCode}, расходы {display(deleting.expenses)} {portfolio?.currencyCode}{:else}{display(deleting.amount)} {deleting.currencyCode} / {display(deleting.portfolioAmount)} {portfolio?.currencyCode}{/if}</p><p class="comment">{deleting.comment}</p>{/if}
+  {#if deleting}<p>{portfolio?.name}: {operationLabel(deleting)}, {deleting.date}, {#if deleting.kind === 'split'}{deleting.ticker}, {display(deleting.oldUnits)} → {display(deleting.newUnits)}; количество {display(deleting.quantityBefore)} → {display(deleting.quantityAfter)}{:else if isTrade(deleting.kind)}{deleting.ticker}, {display(deleting.quantity)} ед., {display(deleting.amount)} {portfolio?.currencyCode}, расходы {display(deleting.expenses)} {portfolio?.currencyCode}{:else if deleting.kind === 'dividend'}{deleting.ticker || 'Без указания актива'}, {display(deleting.amount)} {portfolio?.currencyCode}{:else}{display(deleting.amount)} {deleting.currencyCode} / {display(deleting.portfolioAmount)} {portfolio?.currencyCode}{/if}</p><p class="comment">{deleting.comment}</p>{/if}
   {#if message}<p class="error" role="alert">{message}</p>{/if}
   <div class="actions"><button disabled={busy} onclick={closeDelete}>Отмена</button><button disabled={busy} onclick={() => void remove()}>{busy ? 'Удаление…' : 'Удалить'}</button></div>
 </dialog>

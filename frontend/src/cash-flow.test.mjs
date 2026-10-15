@@ -24,6 +24,7 @@ function harness(overrides = {}) {
     ListAssets: async () => [{id:'1',ticker:'SBER'}],
     SaveSplit: async (pid,id,input) => { writes.push({pid,id,...input}); return ok; },
     PreviewSplit: async () => ({quantityBefore:'12',quantityAfter:'120',errors:{},message:''}),
+    SaveDividend: async (pid,id,input) => { writes.push({pid,id,...input}); return ok; },
     SaveTrade: async (pid,id,input) => { writes.push({pid,id,...input}); return ok; },
     PreviewTrade: async () => ({averagePrice:'100',rounded:false,moneyChange:'-255',errors:{}}),
     ListCashFlows: async () => snapshot(), PreviewCashRate: async () => ({ rate: '94.5', errors: {} }),
@@ -43,12 +44,13 @@ function harness(overrides = {}) {
     globalThis.ui = {
       loadPortfolios, load,
       select(pid) {selected=pid;portfolio=portfolios.find(p=>p.id===pid);return load()},
-      async open(op=null,k='deposit') {portfolio=portfolios.find(p=>p.id===selected);await open(op,k,trigger);different=currencyCode!==portfolio.currencyCode;},
+      async open(op=null,k='deposit') {portfolio=portfolios.find(p=>p.id===selected);await open(op,k,trigger);trade=isTrade(kind);split=kind==='split';dividend=kind==='dividend';different=currencyCode!==portfolio.currencyCode;},
       enter(a,b='',c='') {amount=a;portfolioAmount=b;comment=c;},
       currency(code) {currencyCode=code;different=code!==portfolio.currencyCode;currencyChanged();},
       save() {return save({preventDefault(){}})}, close,
       tradeEnter(asset,q,a,e='0') {assetID=asset;quantity=q;amount=a;expenses=e;},
       assetAdded, refreshAssets, loadAssets, tradePreview() {return effects[2]()},
+      dividendEnter(asset,a,c='') {assetID=asset;amount=a;comment=c;},
       splitEnter(asset,old,next,d=date) {assetID=asset;oldUnits=old;newUnits=next;date=d;},
       splitPreview() {return effects[3]()},
       askDelete(op) {askDelete(op,trigger)}, closeDelete, remove,
@@ -217,4 +219,32 @@ test('split deletion preserves actionable error and confirmation', async () => {
   const {ui}=harness({DeleteCashFlow:async()=>({errors:{},message:'split SBER от 13.10.2026 (3 → 1)'})});
   await ui.loadPortfolios();ui.askDelete({id:'9',kind:'split'});await ui.remove();
   assert.equal(ui.state.deleting.id,'9');assert.match(ui.state.message,/SBER/);ui.closeDelete();assert.equal(ui.state.deleting,null);
+});
+
+
+test('dividend saves exact amount in portfolio currency with optional asset, edit can clear attribution', async () => {
+  const {ui,writes}=harness(); await ui.loadPortfolios(); await ui.open(null,'dividend'); await flush();
+  ui.dividendEnter('', '0,10000000000000000001', 'net'); await ui.save();
+  assert.deepEqual({...writes[0]}, {pid:'1',id:'',date:'2026-10-13',assetID:'',amount:'0,10000000000000000001',comment:'net'});
+  await ui.select('2'); await ui.open({id:'15',kind:'dividend',date:'2026-01-01',assetID:'1',amount:'10',comment:'old'}); await flush();
+  assert.equal(ui.state.assetID,'1'); assert.equal(ui.state.amount,'10');
+  ui.dividendEnter('', '20'); await ui.save();
+  assert.equal(writes[1].pid,'2'); assert.equal(writes[1].id,'15'); assert.equal(writes[1].assetID,'');
+  assert.ok(!('currencyCode' in writes[1])); assert.ok(!('portfolioAmount' in writes[1]));
+});
+test('dividend errors retain input and prevent repeated writes while saving', async () => {
+  let resolve, count=0;
+  const {ui,focus}=harness({SaveDividend:()=>{count++;return new Promise(r=>{resolve=r})}});
+  await ui.loadPortfolios(); await ui.open(null,'dividend'); await flush(); ui.dividendEnter('1','0');
+  const saving=ui.save(); await ui.save(); ui.close();
+  assert.equal(count,1); assert.equal(ui.state.editing,true);
+  resolve({errors:{amount:'Введите сумму'},message:''}); await saving;
+  assert.equal(ui.state.amount,'0'); assert.equal(ui.state.assetID,'1'); assert.equal(ui.state.editing,true); assert.equal(focus.at(-1),'error');
+});
+test('dividend form exposes optional asset and exactly one amount field', () => {
+  const source=readFileSync(new URL('./CashFlowManager.svelte',import.meta.url),'utf8');
+  assert.ok(source.includes("'Без указания актива'"));
+  const branch=source.split('        {#if dividend}')[1].split('        {:else if split}')[0];
+  assert.equal((branch.match(/<input /g)||[]).length,1);
+  assert.ok(branch.includes('Сумма дивидендов ({portfolio?.currencyCode})'));
 });

@@ -286,3 +286,48 @@ func TestSplitStorageErrorIsPrivate(t *testing.T) {
 		t.Fatal(p)
 	}
 }
+
+func TestDividendBridge(t *testing.T) {
+	store, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "dividend.sqlite3"), migrations.Files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if _, err = store.DB().Exec("INSERT INTO portfolios VALUES(1,'Test','test','2026-01-01','USD'); INSERT INTO assets(id,ticker,type_code) VALUES(1,'A','stocks')"); err != nil {
+		t.Fatal(err)
+	}
+	api := NewAPI(func(fn func(*operations.Service) error) error {
+		return fn(operations.NewService(operationssqlite.NewRepository(store.DB())))
+	})
+	in := DividendInputDTO{Date: "2026-01-02", Amount: "0,1"}
+	for _, asset := range []string{"01", "-1", "1.0", "999"} {
+		in.AssetID = asset
+		if got := api.SaveDividend("1", "", in); got.Errors["assetID"] == "" {
+			t.Fatal(got)
+		}
+	}
+	for _, asset := range []string{"", "1"} {
+		in.AssetID = asset
+		got := api.SaveDividend("1", "", in)
+		if got.Message != "" || len(got.Errors) != 0 {
+			t.Fatal(got)
+		}
+	}
+	snap, err := api.ListCashFlows("1")
+	if err != nil || snap.Balance != "0.2" || len(snap.Operations) != 2 {
+		t.Fatal(snap, err)
+	}
+	for _, op := range snap.Operations {
+		if op.CurrencyCode != "USD" || op.PortfolioAmount != "0.1" || op.MoneyChange != "0.1" || op.Rate != "1" {
+			t.Fatal(op)
+		}
+	}
+	in.AssetID = ""
+	if got := api.SaveDividend("1", snap.Operations[0].ID, in); got.Message != "" || len(got.Errors) != 0 {
+		t.Fatal(got)
+	}
+	snap, err = api.ListCashFlows("1")
+	if err != nil || snap.Operations[0].AssetID != "" || snap.Operations[0].Ticker != "" {
+		t.Fatal(snap, err)
+	}
+}

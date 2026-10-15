@@ -79,6 +79,9 @@ func (a *CashFlowAPI) ListCashFlows(pid string) (CashSnapshotDTO, error) {
 		}
 		out.Negative = len(out.Balance) > 0 && out.Balance[0] == '-'
 		for _, o := range snapshot.Operations {
+			if o.Kind == "dividend" {
+				o.CurrencyCode = snapshot.CurrencyCode
+			}
 			rate := ""
 			var err error
 			if !operations.IsTrade(o.Kind) && o.Kind != "split" {
@@ -334,4 +337,28 @@ func (a *CashFlowAPI) PreviewSplit(pid, id string, in SplitInputDTO) SplitPrevie
 	}
 	r := result(err)
 	return SplitPreviewDTO{q.Before, q.After, r.Errors, r.Message}
+}
+
+// DividendInputDTO contains a net amount in the selected portfolio currency.
+type DividendInputDTO struct {
+	Date    string `json:"date"`
+	AssetID string `json:"assetID"`
+	Amount  string `json:"amount"`
+	Comment string `json:"comment"`
+}
+
+func (a *CashFlowAPI) SaveDividend(pid, id string, in DividendInputDTO) CashResultDTO {
+	if !validID(pid) {
+		return result(operations.ErrPortfolio)
+	}
+	if id != "" && !validID(id) {
+		return result(operations.ErrNotFound)
+	}
+	if in.AssetID != "" && !validID(in.AssetID) {
+		return result(&operations.FieldError{Field: "assetID", Message: "Выберите актив или оставьте поле пустым"})
+	}
+	return result(a.useService(func(s *operations.Service) error {
+		_, err := s.Save(context.Background(), pid, id, operations.Input{Kind: "dividend", Date: in.Date, AssetID: in.AssetID, Amount: in.Amount, Comment: in.Comment})
+		return err
+	}))
 }
