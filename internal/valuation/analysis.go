@@ -38,8 +38,10 @@ type Analysis struct {
 	Issues      []string        `json:"issues"`
 }
 type purchasePosition struct {
-	ticker, priceDate               string
-	quantity, bought, amount, price *big.Rat
+	ticker, priceDate string
+	quantity, price   *big.Rat
+	lots              []purchaseLot
+	fifoIncomplete    bool
 }
 
 func ValidatePortfolioID(id string) error {
@@ -48,6 +50,46 @@ func ValidatePortfolioID(id string) error {
 		return errors.New("Выберите портфель")
 	}
 	return nil
+}
+
+type purchaseLot struct {
+	quantity, amount *big.Rat
+}
+
+// averagePrice uses the exact acquisition cost of the remaining FIFO lots.
+// A missing purchase history cannot be valued from sale proceeds.
+func (p *purchasePosition) averagePrice() *big.Rat {
+	if p.quantity.Sign() == 0 {
+		return new(big.Rat)
+	}
+	if p.fifoIncomplete {
+		return nil
+	}
+	amount := new(big.Rat)
+	for _, lot := range p.lots {
+		amount.Add(amount, lot.amount)
+	}
+	return amount.Quo(amount, p.quantity)
+}
+
+func (p *purchasePosition) sellFIFO(quantity *big.Rat) {
+	remaining := new(big.Rat).Set(quantity)
+	for remaining.Sign() > 0 && len(p.lots) > 0 {
+		lot := &p.lots[0]
+		if remaining.Cmp(lot.quantity) >= 0 {
+			remaining.Sub(remaining, lot.quantity)
+			p.lots[0] = purchaseLot{}
+			p.lots = p.lots[1:]
+		} else {
+			left := new(big.Rat).Sub(lot.quantity, remaining)
+			lot.amount.Mul(lot.amount, new(big.Rat).Quo(left, lot.quantity))
+			lot.quantity.Set(left)
+			remaining.SetInt64(0)
+		}
+	}
+	if remaining.Sign() > 0 {
+		p.fifoIncomplete = true
+	}
 }
 
 // BuildAnalysis keeps all intermediate values rational, including split-adjusted prices.
@@ -100,8 +142,10 @@ func BuildAnalysis(s AnalysisSnapshot, pid, date string) (Analysis, error) {
 			total.Add(total, v)
 			row.CurrentValue = Format(v, 2)
 		}
-		if p.bought.Sign() != 0 {
-			avg := new(big.Rat).Quo(p.amount, p.bought)
+		avg := p.averagePrice()
+		if avg == nil {
+			out.Issues = append(out.Issues, p.ticker+": себестоимость FIFO недоступна — в истории продажи превышают покупки; проверьте полноту истории")
+		} else {
 			row.AveragePrice = Format(avg, 2)
 			row.AverageValue = Format(new(big.Rat).Mul(p.quantity, avg), 2)
 		}
@@ -187,7 +231,7 @@ func prepareAnalysis(s AnalysisSnapshot, pid, date string, purchasesOnly bool) (
 		}
 		p := positions[op.AssetID]
 		if p == nil {
-			p = &purchasePosition{ticker: op.Ticker, quantity: new(big.Rat), bought: new(big.Rat), amount: new(big.Rat)}
+			p = &purchasePosition{ticker: op.Ticker, quantity: new(big.Rat)}
 			positions[op.AssetID] = p
 		}
 		if op.Kind == "split" {
@@ -199,19 +243,25 @@ func prepareAnalysis(s AnalysisSnapshot, pid, date string, purchasesOnly bool) (
 			old, _ := decimal(op.OldUnits)
 			next, _ := decimal(op.NewUnits)
 			factor := new(big.Rat).Quo(next, old)
-			p.bought.Mul(p.bought, factor)
+			for i := range p.lots {
+				p.lots[i].quantity.Mul(p.lots[i].quantity, factor)
+			}
 			if p.price != nil {
 				p.price.Quo(p.price, factor)
 			}
 		} else {
 			q, _ := decimal(op.Quantity)
+			a, _ := decimal(op.Amount)
 			if op.Kind == "sell" {
 				p.quantity.Sub(p.quantity, q)
+				if !purchasesOnly {
+					p.sellFIFO(q)
+				}
 			} else {
 				p.quantity.Add(p.quantity, q)
-				p.bought.Add(p.bought, q)
-				a, _ := decimal(op.Amount)
-				p.amount.Add(p.amount, a)
+				if !purchasesOnly {
+					p.lots = append(p.lots, purchaseLot{new(big.Rat).Set(q), a})
+				}
 			}
 			if !purchasesOnly || op.Kind == "buy" {
 				if purchasesOnly {
