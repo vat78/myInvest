@@ -12,21 +12,31 @@ func analysisTrade(id, kind, asset, q, amount, date string) operations.Operation
 func analysisSplit(id, old, next, date string) operations.Operation {
 	return operations.Operation{ID: id, PortfolioID: "1", Ticker: "A", Input: operations.Input{Kind: "split", Date: date, AssetID: "A", OldUnits: old, NewUnits: next}}
 }
-func TestAnalysisPurchaseRules(t *testing.T) {
+func TestAnalysisFIFORules(t *testing.T) {
 	tests := []struct {
 		name                          string
 		ops                           []operations.Operation
 		quantity, current, avg, value string
 	}{
-		{"all buys, latest sell sets current price", []operations.Operation{analysisTrade("1", "buy", "A", "2", "200", "2026-01-01"), analysisTrade("2", "buy", "A", "1", "160", "2026-01-02"), analysisTrade("3", "sell", "A", "1", "900", "2026-01-03")}, "2", "1800", "120", "240"},
+		{"sales consume oldest purchase, latest sell sets current price", []operations.Operation{analysisTrade("1", "buy", "A", "2", "200", "2026-01-01"), analysisTrade("2", "buy", "A", "1", "160", "2026-01-02"), analysisTrade("3", "sell", "A", "1", "900", "2026-01-03")}, "2", "1800", "130", "260"},
+		{"sale crosses purchase lots", []operations.Operation{analysisTrade("1", "buy", "A", "10", "1000", "2026-01-01"), analysisTrade("2", "buy", "A", "10", "2000", "2026-01-02"), analysisTrade("3", "sell", "A", "12", "3600", "2026-01-03")}, "8", "2400", "200", "1600"},
+		{"fractional FIFO without intermediate rounding", []operations.Operation{analysisTrade("1", "buy", "A", "0.3", "1", "2026-01-01"), analysisTrade("2", "sell", "A", "0.1", "10", "2026-01-02")}, "0.2", "20", "3.33", "0.67"},
+		{"numeric ID FIFO on same day", []operations.Operation{analysisTrade("10", "buy", "A", "1", "200", "2026-01-01"), analysisTrade("2", "buy", "A", "1", "100", "2026-01-01"), analysisTrade("11", "sell", "A", "1", "300", "2026-01-01")}, "1", "300", "200", "200"},
+		{"split fractional lots with finite total", []operations.Operation{analysisTrade("1", "buy", "A", "1", "1", "2026-01-01"), analysisTrade("2", "buy", "A", "2", "4", "2026-01-02"), analysisSplit("3", "3", "1", "2026-01-03"), analysisTrade("4", "sell", "A", "0.5", "10", "2026-01-04")}, "0.5", "10", "6", "3"},
+		{"past oversell stays unavailable after purchase", []operations.Operation{analysisTrade("1", "sell", "A", "1", "100", "2026-01-01"), analysisTrade("2", "buy", "A", "2", "300", "2026-01-02")}, "1", "150", "", ""},
+		{"partial sale", []operations.Operation{analysisTrade("1", "buy", "A", "10", "1000", "2026-01-01"), analysisTrade("2", "sell", "A", "4", "600", "2026-01-02")}, "6", "900", "100", "600"},
+		{"sale proceeds do not change remaining cost", []operations.Operation{analysisTrade("1", "buy", "A", "2", "100", "2026-01-01"), analysisTrade("2", "sell", "A", "1", "100", "2026-01-02")}, "1", "100", "50", "50"},
+		{"sale price does not affect average", []operations.Operation{analysisTrade("1", "buy", "A", "2", "1", "2026-01-01"), analysisTrade("2", "sell", "A", "1", "2.005", "2026-01-02")}, "1", "2.01", "0.5", "0.5"},
+		{"sale without purchases", []operations.Operation{analysisTrade("1", "sell", "A", "2", "100", "2026-01-01")}, "-2", "-100", "", ""},
+		{"split after partial sale", []operations.Operation{analysisTrade("1", "buy", "A", "10", "1000", "2026-01-01"), analysisTrade("2", "sell", "A", "4", "600", "2026-01-02"), analysisSplit("3", "1", "2", "2026-01-03")}, "12", "900", "50", "600"},
 		{"fractions and expenses", []operations.Operation{analysisTrade("1", "buy", "A", "0.1", "0.01", "2026-01-01"), analysisTrade("2", "buy", "A", "0.2", "0.04", "2026-01-02")}, "0.3", "0.06", "0.17", "0.05"},
 		{"split then buy same day", []operations.Operation{analysisTrade("1", "buy", "A", "2", "200", "2026-01-01"), analysisTrade("2", "buy", "A", "2", "60", "2026-01-02"), analysisSplit("3", "1", "2", "2026-01-02")}, "6", "180", "43.33", "260"},
 		{"reverse split periodic price", []operations.Operation{analysisTrade("1", "buy", "A", "3", "1", "2026-01-01"), analysisSplit("2", "3", "1", "2026-01-02")}, "1", "1", "1", "1"},
-		{"sell and reentry retains all buys", []operations.Operation{analysisTrade("1", "buy", "A", "1", "100", "2026-01-01"), analysisTrade("2", "sell", "A", "1", "110", "2026-01-02"), analysisTrade("3", "buy", "A", "1", "200", "2026-01-03")}, "1", "200", "150", "150"},
+		{"new entry uses new purchase cost", []operations.Operation{analysisTrade("1", "buy", "A", "1", "100", "2026-01-01"), analysisTrade("2", "sell", "A", "1", "110", "2026-01-02"), analysisTrade("3", "buy", "A", "1", "200", "2026-01-03")}, "1", "200", "200", "200"},
 		{"future excluded", []operations.Operation{analysisTrade("1", "buy", "A", "2", "200", "2026-01-01"), analysisTrade("2", "buy", "A", "1", "500", "2027-01-01")}, "2", "200", "100", "200"},
 		{"numeric ID latest buy", []operations.Operation{analysisTrade("10", "buy", "A", "1", "120", "2026-01-01"), analysisTrade("2", "buy", "A", "1", "100", "2026-01-01")}, "2", "240", "110", "220"},
 		{"half up", []operations.Operation{analysisTrade("1", "buy", "A", "1", "1.005", "2026-01-01")}, "1", "1.01", "1.01", "1.01"},
-		{"negative half up", []operations.Operation{analysisTrade("1", "buy", "A", "1", "1.005", "2026-01-01"), analysisTrade("2", "sell", "A", "2", "5", "2026-01-02")}, "-1", "-2.5", "1.01", "-1.01"},
+		{"negative quantity", []operations.Operation{analysisTrade("1", "buy", "A", "1", "1.005", "2026-01-01"), analysisTrade("2", "sell", "A", "2", "5", "2026-01-02")}, "-1", "-2.5", "", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -56,7 +66,7 @@ func TestAnalysisDistributionAndMissingPrices(t *testing.T) {
 	}
 	ops = append(ops, analysisTrade("4", "sell", "C", "1", "999", "2026-01-02"))
 	out, err = BuildAnalysis(AnalysisSnapshot{Operations: ops}, "1", "2026-01-02")
-	if err != nil || !out.Complete || !out.Negative || out.Total != "-997" || len(out.Issues) != 0 || out.Assets[0].Percent != "" {
+	if err != nil || !out.Complete || !out.Negative || out.Total != "-997" || len(out.Issues) != 1 || out.Assets[0].Percent != "" {
 		t.Fatal(out, err)
 	}
 	empty, err := BuildAnalysis(AnalysisSnapshot{}, "1", "2026-01-01")
@@ -115,5 +125,21 @@ func TestDividendsDoNotChangePurchaseAnalysis(t *testing.T) {
 	after, err := BuildAnalysis(s, "1", "2026-01-03")
 	if err != nil || after.Total != before.Total || len(after.Assets) != 1 || after.Assets[0] != before.Assets[0] {
 		t.Fatal(before, after, err)
+	}
+}
+
+func TestAnalysisClosedPositionAverageIsZero(t *testing.T) {
+	ops := []operations.Operation{analysisTrade("1", "buy", "A", "1", "100", "2026-01-01"), analysisTrade("2", "sell", "A", "1", "150", "2026-01-02")}
+	positions, _, err := prepareAnalysis(AnalysisSnapshot{Operations: ops}, "1", "2026-01-02", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := positions["A"]
+	if p.averagePrice().Sign() != 0 || len(p.lots) != 0 {
+		t.Fatal("closed position must have zero average and no remaining lots")
+	}
+	out, err := BuildAnalysis(AnalysisSnapshot{Operations: ops}, "1", "2026-01-02")
+	if err != nil || len(out.Assets) != 0 || out.Total != "0" {
+		t.Fatal(out, err)
 	}
 }
