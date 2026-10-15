@@ -17,7 +17,7 @@ type bundle struct{ embed.FS }
 var Files = bundle{scripts}
 
 func (bundle) AfterMigration(ctx context.Context, version int, tx *sql.Tx) error {
-	if version == 5 || version == 8 || version == 9 || version == 15 {
+	if version == 5 || version == 8 || version == 9 || version == 13 {
 		return operationssqlite.RebuildAll(ctx, tx)
 	}
 	return nil
