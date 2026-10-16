@@ -16,6 +16,9 @@ func TestAPIValidationAndPrivateErrors(t *testing.T) {
 	if _, err := a.GetOverview("2026-01-01"); err == nil || strings.Contains(err.Error(), "private") {
 		t.Fatal(err)
 	}
+	if _, err := a.GetCapitalHistory("RUB", "2026-01-01", "2026-01-02"); err == nil || strings.Contains(err.Error(), "private") {
+		t.Fatal(err)
+	}
 }
 
 func TestAnalysisValidationAndPrivateErrors(t *testing.T) {

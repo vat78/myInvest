@@ -16,6 +16,9 @@ import (
 	"myinvest/internal/operations"
 	operationsdesktop "myinvest/internal/operations/desktop"
 	operationssqlite "myinvest/internal/operations/sqlite"
+	"myinvest/internal/planning"
+	planningdesktop "myinvest/internal/planning/desktop"
+	planningsqlite "myinvest/internal/planning/sqlite"
 	"myinvest/internal/portfolio"
 	portfoliodesktop "myinvest/internal/portfolio/desktop"
 	portfoliosqlite "myinvest/internal/portfolio/sqlite"
@@ -30,6 +33,7 @@ import (
 )
 
 type App struct {
+	planning   *planningdesktop.PlanningAPI
 	comparison *valuationdesktop.ComparisonAPI
 	benchmarks *benchmarksdesktop.BenchmarksAPI
 	allocation *valuationdesktop.AllocationAPI
@@ -50,6 +54,9 @@ type AppInfo struct {
 
 func newApp() *App {
 	a := &App{ready: make(chan struct{})}
+	a.planning = planningdesktop.NewAPI(func(fn func(*planning.Service) error) error {
+		return a.withStorage(func(db *sql.DB) error { return fn(planning.NewService(planningsqlite.NewRepository(db))) })
+	})
 	a.comparison = valuationdesktop.NewComparisonAPI(func(fn func(*valuation.ComparisonService) error) error {
 		return a.withStorage(func(db *sql.DB) error { return fn(valuation.NewComparisonService(valuationsqlite.NewRepository(db))) })
 	})

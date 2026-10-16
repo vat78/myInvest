@@ -13,6 +13,20 @@ type OverviewAPI struct {
 func NewAPI(withService func(func(*valuation.Service) error) error) *OverviewAPI {
 	return &OverviewAPI{withService}
 }
+
+func (a *OverviewAPI) GetCapitalHistory(code, start, end string) ([]valuation.CapitalPoint, error) {
+	var out []valuation.CapitalPoint
+	err := a.withService(func(s *valuation.Service) error {
+		var err error
+		out, err = s.CapitalHistory(context.Background(), code, start, end)
+		return err
+	})
+	if err != nil {
+		return nil, errors.New("Не удалось загрузить стоимость портфелей. Повторите попытку")
+	}
+	return out, nil
+}
+
 func (a *OverviewAPI) GetOverview(date string) (valuation.Overview, error) {
 	if err := valuation.ValidateDate(date); err != nil {
 		return valuation.Overview{}, err
