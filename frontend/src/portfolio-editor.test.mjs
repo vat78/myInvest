@@ -31,7 +31,7 @@ function harness(overrides = {}) {
     nameInput = {focus() {calls.focus.push('name')}};
     addButton = {focus() {calls.focus.push('add')}};
     globalThis.ui = {
-      openList, closeList, toggleMenu, dismissMenu, menuKey, openAssets,
+      openList, closeList, toggleMenu, dismissMenu, menuKey, openAssets, openBenchmarks,
       open(p = null) { return openForm(p, addButton); },
       close: closeForm,
       enter(n, d, c) { name = n; openedOn = d; currencyCode = c; },
@@ -133,4 +133,11 @@ test('asset menu item closes the menu and preserves its return-focus target', as
   const {ui,calls} = harness({$props:()=>({onassets:element=>{trigger=element}})});
   await ui.toggleMenu();ui.openAssets();assert.equal(ui.state.menu,false);assert.equal(ui.state.opened,false);
   trigger.focus();assert.equal(calls.focus.at(-1),'menu');
+});
+
+test('benchmark menu opens directory and preserves its return-focus target', async () => {
+  let target;
+  const { ui } = harness({ $props: () => ({ onbenchmarks: trigger => { target = trigger; } }) });
+  await ui.toggleMenu(); ui.openBenchmarks();
+  assert.equal(ui.state.menu, false); assert.equal(typeof target.focus, 'function');
 });

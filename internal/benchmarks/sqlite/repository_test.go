@@ -166,3 +166,91 @@ func TestUpgradeBacksUpExistingDatabase(t *testing.T) {
 		t.Fatal(price, e)
 	}
 }
+
+func TestSourcesMigrationAndPersistence(t *testing.T) {
+	ctx := context.Background()
+	old := previousBundle{fstest.MapFS{}}
+	names, err := fs.ReadDir(migrations.Files, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range names {
+		if name.Name() >= "0014" {
+			continue
+		}
+		data, err := fs.ReadFile(migrations.Files, name.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		old.MapFS[name.Name()] = &fstest.MapFile{Data: data}
+	}
+	path := filepath.Join(t.TempDir(), "sources.db")
+	store, err := storage.Open(ctx, path, old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.DB().Exec(`INSERT INTO benchmarks(name,name_key) VALUES('Индекс','индекс'); INSERT INTO benchmark_points(benchmark_id,date,mode,input,value) VALUES(1,'2026-01-01','value','100','100')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.Close()
+	store, err = storage.Open(ctx, path, migrations.Files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := benchmarks.NewService(NewRepository(store.DB()))
+	rows, err := s.List(ctx)
+	if err != nil || len(rows) != 1 || rows[0].Sources != "" {
+		t.Fatal(rows, err)
+	}
+	sources := "https://example.org/stats\nhttp://example.com/data"
+	if err = s.UpdateSources(ctx, "1", sources); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.UpdateSources(ctx, "1", "javascript:alert(1)"); err == nil {
+		t.Fatal("invalid source accepted")
+	}
+	if err = s.UpdateSources(ctx, "999", sources); err == nil {
+		t.Fatal("missing benchmark accepted")
+	}
+	b, err := s.Create(ctx, benchmarks.Benchmark{Name: "Другой", Sources: sources})
+	if err != nil || b.Sources != sources {
+		t.Fatal(b, err)
+	}
+	store.Close()
+	store, err = storage.Open(ctx, path, migrations.Files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	s = benchmarks.NewService(NewRepository(store.DB()))
+	rows, err = s.List(ctx)
+	if err != nil || len(rows) != 2 {
+		t.Fatal(rows, err)
+	}
+	for _, row := range rows {
+		if row.Sources != sources {
+			t.Fatal(row)
+		}
+	}
+	points, err := s.History(ctx, "1")
+	if err != nil || len(points) != 1 || points[0].Value != "100" {
+		t.Fatal(points, err)
+	}
+	if err = s.UpdateSources(ctx, "1", ""); err != nil {
+		t.Fatal(err)
+	}
+	rows, err = s.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range rows {
+		if row.ID == "1" && row.Sources != "" {
+			t.Fatal(row)
+		}
+	}
+	backups, err := filepath.Glob(filepath.Join(filepath.Dir(path), "backups", "*.sqlite3"))
+	if err != nil || len(backups) != 1 {
+		t.Fatal(backups, err)
+	}
+}

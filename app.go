@@ -30,6 +30,7 @@ import (
 )
 
 type App struct {
+	comparison *valuationdesktop.ComparisonAPI
 	benchmarks *benchmarksdesktop.BenchmarksAPI
 	allocation *valuationdesktop.AllocationAPI
 	quotes     *quotesdesktop.QuotesAPI
@@ -49,6 +50,9 @@ type AppInfo struct {
 
 func newApp() *App {
 	a := &App{ready: make(chan struct{})}
+	a.comparison = valuationdesktop.NewComparisonAPI(func(fn func(*valuation.ComparisonService) error) error {
+		return a.withStorage(func(db *sql.DB) error { return fn(valuation.NewComparisonService(valuationsqlite.NewRepository(db))) })
+	})
 	a.benchmarks = benchmarksdesktop.NewAPI(func(fn func(*benchmarks.Service) error) error {
 		return a.withStorage(func(db *sql.DB) error { return fn(benchmarks.NewService(benchmarkssqlite.NewRepository(db))) })
 	})

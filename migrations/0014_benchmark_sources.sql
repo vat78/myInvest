@@ -1,0 +1,1 @@
+ALTER TABLE benchmarks ADD COLUMN sources TEXT NOT NULL DEFAULT '';

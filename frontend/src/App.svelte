@@ -30,6 +30,8 @@
   import AssetManager from './AssetManager.svelte';
   import QuoteManager from './QuoteManager.svelte';
   import BenchmarkManager from './BenchmarkManager.svelte';
+  import BenchmarkDirectory from './BenchmarkDirectory.svelte';
+  let benchmarkDirectory: BenchmarkDirectory;
   let quoteRevision = $state(0);
   let assetManager: AssetManager;
   let cashManager: CashFlowManager;
@@ -161,7 +163,8 @@
   <button class:missing={!todayRate} class="rate" onclick={() => openEditor()} aria-label="Ввести или изменить курс валют">
     {todayRate ? `1 USD = ${formatDecimal(todayRate)} RUB` : '???'}
   </button>
-  <div class="menu-slot"><AssetManager bind:this={assetManager} onadded={asset => { void cashManager.assetAdded(asset); quoteRevision++; void refreshOverview(); }} onchanged={() => { void cashManager.refreshAssets(); quoteRevision++; void refreshOverview(); }} /><PortfolioManager bind:this={portfolioManager} onchanged={() => { portfolioRevision++; void refreshOverview(); }} onassets={trigger => void assetManager.openList(trigger)} /></div>
+  <BenchmarkDirectory bind:this={benchmarkDirectory} />
+  <div class="menu-slot"><AssetManager bind:this={assetManager} onadded={asset => { void cashManager.assetAdded(asset); quoteRevision++; void refreshOverview(); }} onchanged={() => { void cashManager.refreshAssets(); quoteRevision++; void refreshOverview(); }} /><PortfolioManager bind:this={portfolioManager} onchanged={() => { portfolioRevision++; void refreshOverview(); }} onassets={trigger => void assetManager.openList(trigger)} onbenchmarks={trigger => void benchmarkDirectory.openList(trigger)} /></div>
 </header>
 <main>
   <section class="hero" aria-label="Сводка инвестиций">
@@ -203,7 +206,7 @@
     <QuoteManager revision={quoteRevision} onchanged={() => void refreshOverview()} onrate={openEditor} onaddasset={trigger => void assetManager.openList(trigger)} />
   </div>
   <div class="panel" id="panel-benchmarks" role="tabpanel" aria-labelledby="tab-benchmarks" hidden={tab !== 'benchmarks'} tabindex="0">
-    <BenchmarkManager />
+    <BenchmarkManager revision={analysisRevision} />
   </div>
 </main>
 

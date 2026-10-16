@@ -12,3 +12,5 @@ export function ListBenchmarks():Promise<Array<benchmarks.Benchmark>>;
 export function PreviewBenchmarkPoint(arg1:benchmarks.Point):Promise<desktop.BenchmarkPreviewResult>;
 
 export function SaveBenchmarkPoint(arg1:benchmarks.Point):Promise<desktop.BenchmarkPointResult>;
+
+export function SaveBenchmarkSources(arg1:string,arg2:string):Promise<desktop.BenchmarkPointResult>;

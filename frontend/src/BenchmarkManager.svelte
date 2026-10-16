@@ -1,5 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import ReturnComparison from './ReturnComparison.svelte';
+  let { revision = 0 }: { revision?: number } = $props();
+  let historyRevision = $state(0);
   import { ListBenchmarks, CreateBenchmark, BenchmarkHistory, SaveBenchmarkPoint, PreviewBenchmarkPoint } from '../wailsjs/go/desktop/BenchmarksAPI';
   import { ListCurrencies } from '../wailsjs/go/desktop/API';
   import { localDate } from './calendar';
@@ -8,6 +11,7 @@
   let points = $state<Awaited<ReturnType<typeof BenchmarkHistory>>>([]);
   let currencies = $state<string[]>([]);
   let benchmarkID = $state(''), date = $state(localDate()), mode = $state('value'), input = $state('');
+  let sources = $state('');
   let name = $state(''), currencyCode = $state(''), adding = $state(false), editing = $state(false);
   let busy = $state(false), loading = $state(false), loadError = $state('');
   let listLoading = $state(true), listError = $state('');
@@ -55,13 +59,13 @@
   }
   async function create(event: SubmitEvent) {
     event.preventDefault(); if (busy) return; busy = true; createErrors = {}; createMessage = '';
-    try { const result = await CreateBenchmark({id: '', name, currencyCode}); if (!alive) return;
+    try { const result = await CreateBenchmark({id: '', name, currencyCode, sources}); if (!alive) return;
       createErrors = result.errors; createMessage = result.message;
       if (!createMessage && !Object.keys(createErrors).length) {
         // Keep the newly created selection even if the directory refresh fails.
         benchmarks = [...benchmarks, result.benchmark]; benchmarkID = result.benchmark.id;
         editing = false; date = localDate(); mode = 'value'; input = ''; errors = {}; message = ''; feedback = '';
-        adding = false; name = ''; currencyCode = ''; await refreshList();
+        adding = false; name = ''; currencyCode = ''; sources = ''; await refreshList();
       }
     } catch { if (alive) createMessage = 'Не удалось создать бенчмарк. Повторите попытку.'; }
     finally { if (alive) busy = false; }
@@ -70,11 +74,12 @@
     event.preventDefault(); if (busy) return; busy = true; errors = {}; message = ''; feedback = '';
     try { const result = await SaveBenchmarkPoint({benchmarkID, date, mode, input, value: '', growth: ''}); if (!alive) return;
       errors = result.errors; message = result.message;
-      if (!message && !Object.keys(errors).length) { feedback = 'Исторические данные сохранены'; await refreshHistory(); }
+      if (!message && !Object.keys(errors).length) { feedback = 'Исторические данные сохранены'; historyRevision++; await refreshHistory(); }
     } catch { if (alive) message = 'Не удалось сохранить данные. Повторите попытку.'; }
     finally { if (alive) busy = false; }
   }
 </script>
+<ReturnComparison {benchmarks} revision={revision + historyRevision} />
 <section aria-labelledby="benchmarks-title">
   <h2 id="benchmarks-title">Бенчмарки</h2>
   <p class="hint">Инфляция, депозиты, недвижимость и другие ориентиры. Прирост применяется к ближайшей предыдущей дате, без пересчёта в годовую ставку. Для индекса можно начать со стоимости 100.</p>
@@ -96,6 +101,7 @@
             <option value="">Индекс (без валюты)</option>{#each currencies as c}<option value={c}>{c}</option>{/each}
           </select><span class="error" id="benchmark-currency-error">{createErrors.currencyCode ?? ''}</span></label>
         </div>
+        <label>Источники <textarea bind:value={sources} rows="3" placeholder="https://example.com/statistics" aria-invalid={!!createErrors.sources} aria-describedby="benchmark-create-sources-hint benchmark-create-sources-error"></textarea><span id="benchmark-create-sources-hint">Ссылки http:// или https://, по одной на строку.</span><span class="error" id="benchmark-create-sources-error">{createErrors.sources ?? ''}</span></label>
         <button class="primary" type="submit">{busy ? 'Сохранение…' : 'Создать'}</button>
       </fieldset>
       {#if createMessage}<p class="error" role="alert">{createMessage}</p>{/if}
@@ -138,7 +144,7 @@
   fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
   .fields { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,180px),1fr)); gap: 16px; }
   label { display: flex; flex-direction: column; gap: 8px; min-width: 0; font-size: 14px; }
-  button,input,select { font: inherit; border: 1px solid #c4cfd8; border-radius: 8px; padding: 10px; color: inherit; background: white; min-width: 0; }
+  button,input,select,textarea { font: inherit; border: 1px solid #c4cfd8; border-radius: 8px; padding: 10px; color: inherit; background: white; min-width: 0; }
   button { cursor: pointer; } button:disabled { opacity: .6; cursor: default; }
   .primary { background: #207653; color: white; border-color: #207653; }
   .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-top: 16px; }

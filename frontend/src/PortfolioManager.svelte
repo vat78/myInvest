@@ -4,7 +4,7 @@
   import { ListPortfolios, CreatePortfolio, UpdatePortfolio } from '../wailsjs/go/desktop/PortfolioAPI';
   import ActionIcon from './ActionIcon.svelte';
   import { localDate } from './calendar';
-  let { onchanged = () => {}, onassets }: { onchanged?: () => void; onassets?: (trigger: HTMLButtonElement) => void } = $props();
+  let { onchanged = () => {}, onassets, onbenchmarks }: { onchanged?: () => void; onbenchmarks?: (trigger: HTMLButtonElement) => void; onassets?: (trigger: HTMLButtonElement) => void } = $props();
   type Portfolio = { id: string; name: string; openedOn: string; currencyCode: string };
   let menu = $state(false);
   let menuRoot: HTMLDivElement;
@@ -39,6 +39,7 @@
     if (menu) { await tick(); if (menu) portfolioItem?.focus(); }
   }
   function openAssets() { menu = false; onassets?.(menuButton); }
+  function openBenchmarks() { menu = false; onbenchmarks?.(menuButton); }
   function dismissMenu(event: MouseEvent) {
     if (menu && !menuRoot.contains(event.target as Node)) menu = false;
   }
@@ -128,6 +129,7 @@
     <nav id="app-menu" aria-label="Меню приложения">
       <button bind:this={portfolioItem} onclick={openList}>Портфели</button>
       <button onclick={openAssets}>Активы</button>
+      <button onclick={openBenchmarks}>Бенчмарки</button>
     </nav>
   {/if}
 </div>
