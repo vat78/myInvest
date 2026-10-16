@@ -47,7 +47,7 @@ test('actual read failure retains forecast and can retry without saving',async()
  let fail=true;const h=harness({PreviewFinancialPlan:async()=>({plan:forecast,errors:{},message:''}),GetCapitalHistory:async()=>{if(fail)throw Error('private SQL');return capital}});
  h.select('RUB');await h.calculate(false);await new Promise(r=>setImmediate(r));
  assert.equal(h.preview.firstContribution,'200');assert.match(h.actualError,/загрузить/);assert.doesNotMatch(h.actualError,/private/);
- fail=false;await h.refreshActual(forecast.current.points);assert.equal(h.actual.length,1);assert.equal(h.actualError,'');
+ fail=false;await h.refreshActual(h.draft);assert.equal(h.actual.length,1);assert.equal(h.actualError,'');
 });
 test('editing parameters discards an outdated portfolio history response',async()=>{
  const pending=deferred();const h=harness({PreviewFinancialPlan:async()=>({plan:forecast,errors:{},message:''}),GetCapitalHistory:()=>pending.promise});
@@ -56,6 +56,25 @@ test('editing parameters discards an outdated portfolio history response',async(
 });
 test('actual history is clipped to terminal plan date and is not stored on save',async()=>{
  let args,calls=0;const h=harness({GetCapitalHistory:async(...a)=>{args=a;calls++;return capital},SaveFinancialPlan:async()=>({plan:saved,errors:{},message:''})});
- h.select('RUB');await h.refreshActual([{date:'2024-01-01'},{date:'2025-01-01'}]);assert.deepEqual(args,['RUB','2024-01-01','2025-01-01']);
+ h.select('RUB');h.edit({startYear:'2024',years:'1'});await h.refreshActual(h.draft);assert.deepEqual(args,['RUB','2024-01-01','2025-01-01']);
  await h.calculate(true);assert.equal(calls,1);assert.equal(h.actual.length,0);
+});
+
+for (const [mode, points] of [
+ ['goal', []],
+ ['contribution', [{date:'2024-01-01',nominal:'0',real:'0'},{date:'2025-01-01',nominal:'100',real:'100'}]],
+]) test(`${mode}: missing inflation does not truncate actual portfolio history`,async()=>{
+ let args;
+ const current={complete:false,issues:['Нет границ индекса'],points};
+ const h=harness({PreviewFinancialPlan:async()=>({plan:{current},errors:{},message:''}),GetCapitalHistory:async(...a)=>{args=a;return capital}});
+ h.select('RUB');h.edit({startYear:'2024',years:'10',mode});await h.calculate(false);await new Promise(r=>setImmediate(r));
+ assert.deepEqual(args,['RUB','2024-01-01','2026-10-14']);
+ assert.equal(h.preview.complete,false);assert.equal(h.actual[0].value,capital[0].value);
+});
+
+test('a future plan has no actual history and does not query future dates',async()=>{
+ let calls=0;
+ const h=harness({GetCapitalHistory:async()=>{calls++;return capital}});
+ h.select('RUB');h.edit({startYear:'2027',years:'10'});await h.refreshActual(h.draft);
+ assert.equal(calls,0);assert.equal(h.actual.length,0);assert.equal(h.actualLoading,false);
 });

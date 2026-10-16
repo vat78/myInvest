@@ -34,13 +34,16 @@
     } catch { if (alive && id === listRequest) listError = 'Не удалось загрузить валюты и бенчмарки.'; }
   }
   function clearActual() { ++actualRequest; actual = []; actualLoading = false; actualError = ''; }
-  async function refreshActual(points: planning.Point[]) {
-    const id = ++actualRequest, code = currencyCode;
+  async function refreshActual(parameters: planning.Parameters) {
+    const id = ++actualRequest, code = parameters.currencyCode;
     actual = []; actualError = ''; actualLoading = true;
     try {
-      if (!points.length) return;
-      const today = localDate(), last = points[points.length - 1].date;
-      const result = await GetCapitalHistory(code, points[0].date, last < today ? last : today);
+      // Calendar boundaries come from the full plan, even when inflation gaps stop its forecast.
+      const year = Number(parameters.startYear), years = Number(parameters.years);
+      const start = `${String(year).padStart(4, '0')}-01-01`;
+      const last = `${String(year + years).padStart(4, '0')}-01-01`, today = localDate();
+      if (start > today) return;
+      const result = await GetCapitalHistory(code, start, last < today ? last : today);
       if (alive && id === actualRequest && code === currencyCode) actual = result;
     } catch { if (alive && id === actualRequest) actualError = 'Не удалось загрузить фактическую стоимость портфелей.'; }
     finally { if (alive && id === actualRequest) actualLoading = false; }
@@ -70,7 +73,7 @@
       errors = result.errors; message = result.message;
       if (message || Object.keys(errors).length) return;
       if (save) { plan = result.plan; draft = { ...result.plan.parameters }; feedback = 'План сохранён. Исходный сценарий зафиксирован.'; }
-      else { preview = result.plan.current; void refreshActual(result.plan.current.points); }
+      else { preview = result.plan.current; void refreshActual(input); }
     } catch { if (alive && id === request) message = 'Не удалось обработать финансовый план. Повторите попытку.'; }
     finally { if (alive) busy = false; }
   }
@@ -122,10 +125,10 @@
       {:else}<p class="error">Расчёт неполный. Конечный капитал и рекомендация для цели недоступны.</p>{/if}
       {#if preview}
         {#if actualLoading}<p role="status">Загрузка фактической стоимости портфелей…</p>{/if}
-        {#if actualError}<p class="error" role="alert">{actualError} <button type="button" onclick={() => preview && void refreshActual(preview.points)}>Повторить</button></p>{/if}
+        {#if actualError}<p class="error" role="alert">{actualError} <button type="button" onclick={() => preview && void refreshActual(draft)}>Повторить</button></p>{/if}
         {#if !actualLoading && !actualError && !actual.length}<p class="hint">За период расчёта до сегодняшнего дня нет истории стоимости портфелей.</p>{/if}
       {/if}
-      {#if scenario.points.length}<PlanChart points={scenario.points} actual={preview ? actual : []} {currency} />{/if}
+      {#if scenario.points.length || (preview && actual.length)}<PlanChart points={scenario.points} actual={preview ? actual : []} {currency} />{/if}
       <div class="table"><table><thead><tr><th>Год</th><th>Капитал до взноса</th><th>Взнос 1 января</th><th>Инфляция, %</th><th>Источник</th><th>Инвестиционный прирост</th><th>Капитал на следующее 1 января</th><th>В деньгах базовой даты</th></tr></thead><tbody>{#each scenario.rows as row}<tr><td>{row.year}</td><td>{formatChartAmount(row.before)}</td><td>{formatChartAmount(row.contribution)}</td><td>{formatDecimal(row.inflation)}</td><td>{sources[row.source]}</td><td>{formatChartAmount(row.income)}</td><td>{formatChartAmount(row.capital)}</td><td>{formatChartAmount(row.realCapital)}</td></tr>{/each}</tbody></table></div>
     {/if}
     {#if plan}<details><summary>Исходный сценарий — сохранённый снимок</summary>
