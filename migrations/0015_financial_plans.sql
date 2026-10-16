@@ -39,7 +39,7 @@ CREATE TABLE financial_plans (
   AND initial_numerator!='-'
   AND instr(substr(initial_numerator,2),'-')=0),
  initial_denominator TEXT NOT NULL CHECK(length(initial_denominator)>0 AND initial_denominator NOT GLOB '*[^0-9]*'
- 
+
   AND length(ltrim(initial_denominator,'0'))>0),
  original TEXT NOT NULL CHECK(json_valid(original) AND json_type(original)='object')
 ) STRICT;

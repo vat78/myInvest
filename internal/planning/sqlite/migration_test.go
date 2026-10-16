@@ -16,6 +16,65 @@ type previousBundle struct{ fstest.MapFS }
 func (previousBundle) AfterMigration(ctx context.Context, v int, tx *sql.Tx) error {
 	return migrations.Files.AfterMigration(ctx, v, tx)
 }
+
+func TestUpgradeFromMainMigrations(t *testing.T) {
+	ctx := context.Background()
+	old := previousBundle{fstest.MapFS{}}
+	files, err := fs.ReadDir(migrations.Files, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range files {
+		if file.Name() >= "0015" {
+			continue
+		}
+		data, err := fs.ReadFile(migrations.Files, file.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		old.MapFS[file.Name()] = &fstest.MapFile{Data: data}
+	}
+	path := filepath.Join(t.TempDir(), "main.db")
+	db, err := storage.Open(ctx, path, old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.DB().Exec(`INSERT INTO benchmarks(id,name,name_key,sources) VALUES(1,'CPI','cpi','https://example.org/cpi')`); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	db.Close()
+	db, err = storage.Open(ctx, path, migrations.Files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var version int
+	if err = db.DB().QueryRow("SELECT max(version) FROM schema_migrations").Scan(&version); err != nil || version != 16 {
+		t.Fatal(version, err)
+	}
+	var sources string
+	if err = db.DB().QueryRow("SELECT sources FROM benchmarks WHERE id=1").Scan(&sources); err != nil || sources != "https://example.org/cpi" {
+		t.Fatal("existing benchmark changed", sources, err)
+	}
+	var count int
+	if err = db.DB().QueryRow("SELECT count(*) FROM currency_financial_plans").Scan(&count); err != nil || count != 0 {
+		t.Fatal(count, err)
+	}
+	backups, err := filepath.Glob(filepath.Join(filepath.Dir(path), "backups", "*.sqlite3"))
+	if err != nil || len(backups) != 1 {
+		t.Fatal(backups, err)
+	}
+	backup, err := sql.Open("sqlite", backups[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer backup.Close()
+	if err = backup.QueryRow("SELECT max(version) FROM schema_migrations").Scan(&version); err != nil || version != 14 {
+		t.Fatal("backup does not preserve main schema", version, err)
+	}
+}
+
 func TestMigrationBackupAndRollback(t *testing.T) {
 	for _, fail := range []bool{false, true} {
 		t.Run(map[bool]string{false: "upgrade", true: "rollback"}[fail], func(t *testing.T) {
@@ -26,7 +85,7 @@ func TestMigrationBackupAndRollback(t *testing.T) {
 				t.Fatal(e)
 			}
 			for _, f := range files {
-				if f.Name() >= "0014" {
+				if f.Name() >= "0016" {
 					continue
 				}
 				data, e := fs.ReadFile(migrations.Files, f.Name())
@@ -50,7 +109,7 @@ func TestMigrationBackupAndRollback(t *testing.T) {
 			}
 
 			if fail {
-				if _, e = db.DB().Exec(`CREATE TRIGGER fail_14 BEFORE INSERT ON schema_migrations WHEN NEW.version=14 BEGIN SELECT RAISE(ABORT,'test');END`); e != nil {
+				if _, e = db.DB().Exec(`CREATE TRIGGER fail_16 BEFORE INSERT ON schema_migrations WHEN NEW.version=16 BEGIN SELECT RAISE(ABORT,'test');END`); e != nil {
 					t.Fatal(e)
 				}
 			}
@@ -95,7 +154,7 @@ func TestMigrationBackupAndRollback(t *testing.T) {
 				t.Fatal(e)
 			}
 			defer backup.Close()
-			if e = backup.QueryRow("SELECT max(version) FROM schema_migrations").Scan(&count); e != nil || count != 13 {
+			if e = backup.QueryRow("SELECT max(version) FROM schema_migrations").Scan(&count); e != nil || count != 15 {
 				t.Fatal(count, e)
 			}
 		})

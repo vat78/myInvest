@@ -3,7 +3,8 @@
   import { ListCurrencies } from '../wailsjs/go/desktop/API';
   import { ListBenchmarks } from '../wailsjs/go/desktop/BenchmarksAPI';
   import { GetFinancialPlan, PreviewFinancialPlan, SaveFinancialPlan } from '../wailsjs/go/desktop/PlanningAPI';
-  import type { planning } from '../wailsjs/go/models';
+  import { GetCapitalHistory } from '../wailsjs/go/desktop/OverviewAPI';
+  import type { planning, valuation } from '../wailsjs/go/models';
   import { localDate } from './calendar';
   import { formatDecimal, formatChartAmount } from './decimal-format.mjs';
   import PlanChart from './PlanChart.svelte';
@@ -19,6 +20,8 @@
   let errors = $state<Record<string,string>>({}), message = $state(''), feedback = $state('');
   let busy = $state(false), loading = $state(false), listError = $state('');
   let alive = true, request = 0, listRequest = 0;
+  let actual = $state<valuation.CapitalPoint[]>([]), actualLoading = $state(false), actualError = $state('');
+  let actualRequest = 0;
   const currency = $derived(currencyCode);
   const scenario = $derived(preview ?? plan?.current);
   const sources: Record<string,string> = { historical: 'Факт: индекс на 31 декабря', expected: 'Ожидаемая', estimated: 'Оценка вместо отсутствующего факта', missing: 'Нет границ индекса' };
@@ -30,8 +33,21 @@
       currencies = codes; benchmarks = bs;
     } catch { if (alive && id === listRequest) listError = 'Не удалось загрузить валюты и бенчмарки.'; }
   }
-  function changed() { preview = null; errors = {}; feedback = ''; ++request; }
+  function clearActual() { ++actualRequest; actual = []; actualLoading = false; actualError = ''; }
+  async function refreshActual(points: planning.Point[]) {
+    const id = ++actualRequest, code = currencyCode;
+    actual = []; actualError = ''; actualLoading = true;
+    try {
+      if (!points.length) return;
+      const today = localDate(), last = points[points.length - 1].date;
+      const result = await GetCapitalHistory(code, points[0].date, last < today ? last : today);
+      if (alive && id === actualRequest && code === currencyCode) actual = result;
+    } catch { if (alive && id === actualRequest) actualError = 'Не удалось загрузить фактическую стоимость портфелей.'; }
+    finally { if (alive && id === actualRequest) actualLoading = false; }
+  }
+  function changed() { preview = null; clearActual(); errors = {}; feedback = ''; ++request; }
   async function load(reset: boolean) {
+    clearActual();
     const id = ++request, pid = currencyCode; loading = true; message = ''; preview = null;
     if (reset) { plan = null; draft = defaults(pid); errors = {}; feedback = ''; }
     try {
@@ -45,6 +61,7 @@
   function selectCurrency() { if (busy) return; void load(true); }
   async function calculate(save: boolean) {
     if (busy || loading || !currencyCode) return;
+    clearActual();
     busy = true; message = ''; errors = {}; feedback = ''; preview = null;
     const id = ++request, input = { ...draft, currencyCode };
     try {
@@ -53,7 +70,7 @@
       errors = result.errors; message = result.message;
       if (message || Object.keys(errors).length) return;
       if (save) { plan = result.plan; draft = { ...result.plan.parameters }; feedback = 'План сохранён. Исходный сценарий зафиксирован.'; }
-      else preview = result.plan.current;
+      else { preview = result.plan.current; void refreshActual(result.plan.current.points); }
     } catch { if (alive && id === request) message = 'Не удалось обработать финансовый план. Повторите попытку.'; }
     finally { if (alive) busy = false; }
   }
@@ -61,7 +78,7 @@
     void refreshLists();
     const refresh = () => { if (active && currencyCode && !busy && !loading) void load(false); };
     window.addEventListener('focus', refresh);
-    return () => { alive = false; ++request; ++listRequest; window.removeEventListener('focus', refresh); };
+    return () => { alive = false; ++request; ++listRequest; ++actualRequest; window.removeEventListener('focus', refresh); };
   });
   $effect(() => { void revision; if (active) untrack(() => { void refreshLists(); if (currencyCode && !busy && !loading) void load(false); }); });
 </script>
@@ -103,7 +120,12 @@
       {#if scenario.complete}<p>Конечный капитал: {formatChartAmount(scenario.finalCapital)} {currency}; покупательная способность на базовую дату: {formatChartAmount(scenario.finalRealCapital)} {currency}.</p>
         {#if scenario.excess}<p>Цель {scenario.goalReached ? 'достигнута' : 'не достигнута'}. Превышение цели: {formatDecimal(scenario.excess)} {currency}.</p>{/if}
       {:else}<p class="error">Расчёт неполный. Конечный капитал и рекомендация для цели недоступны.</p>{/if}
-      {#if scenario.points.length}<PlanChart points={scenario.points} {currency} />{/if}
+      {#if preview}
+        {#if actualLoading}<p role="status">Загрузка фактической стоимости портфелей…</p>{/if}
+        {#if actualError}<p class="error" role="alert">{actualError} <button type="button" onclick={() => preview && void refreshActual(preview.points)}>Повторить</button></p>{/if}
+        {#if !actualLoading && !actualError && !actual.length}<p class="hint">За период расчёта до сегодняшнего дня нет истории стоимости портфелей.</p>{/if}
+      {/if}
+      {#if scenario.points.length}<PlanChart points={scenario.points} actual={preview ? actual : []} {currency} />{/if}
       <div class="table"><table><thead><tr><th>Год</th><th>Капитал до взноса</th><th>Взнос 1 января</th><th>Инфляция, %</th><th>Источник</th><th>Инвестиционный прирост</th><th>Капитал на следующее 1 января</th><th>В деньгах базовой даты</th></tr></thead><tbody>{#each scenario.rows as row}<tr><td>{row.year}</td><td>{formatChartAmount(row.before)}</td><td>{formatChartAmount(row.contribution)}</td><td>{formatDecimal(row.inflation)}</td><td>{sources[row.source]}</td><td>{formatChartAmount(row.income)}</td><td>{formatChartAmount(row.capital)}</td><td>{formatChartAmount(row.realCapital)}</td></tr>{/each}</tbody></table></div>
     {/if}
     {#if plan}<details><summary>Исходный сценарий — сохранённый снимок</summary>

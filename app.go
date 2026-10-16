@@ -33,7 +33,7 @@ import (
 )
 
 type App struct {
-    planning   *planningdesktop.PlanningAPI
+	planning   *planningdesktop.PlanningAPI
 	comparison *valuationdesktop.ComparisonAPI
 	benchmarks *benchmarksdesktop.BenchmarksAPI
 	allocation *valuationdesktop.AllocationAPI

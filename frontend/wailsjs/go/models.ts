@@ -45,40 +45,6 @@ export namespace benchmarks {
 
 export namespace desktop {
 
-	export class PlanningResult {
-		plan: planning.Plan;
-		errors: Record<string, string>;
-		message: string;
-
-		static createFrom(source: any = {}) {
-			return new PlanningResult(source);
-		}
-
-		constructor(source: any = {}) {
-			if ('string' === typeof source) source = JSON.parse(source);
-			this.plan = this.convertValues(source["plan"], planning.Plan);
-			this.errors = source["errors"];
-			this.message = source["message"];
-		}
-
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-			if (!a) {
-				return a;
-			}
-			if (a.slice && a.map) {
-				return (a as any[]).map(elem => this.convertValues(elem, classs));
-			} else if ("object" === typeof a) {
-				if (asMap) {
-					for (const key of Object.keys(a)) {
-						a[key] = new classs(a[key]);
-					}
-					return a;
-				}
-				return new classs(a);
-			}
-			return a;
-		}
-	}
 	export class AllocationResult {
 	    errors: Record<string, string>;
 	    message: string;
@@ -496,6 +462,40 @@ export namespace desktop {
 	        this.comment = source["comment"];
 	    }
 	}
+	export class PlanningResult {
+	    plan: planning.Plan;
+	    errors: Record<string, string>;
+	    message: string;
+
+	    static createFrom(source: any = {}) {
+	        return new PlanningResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.plan = this.convertValues(source["plan"], planning.Plan);
+	        this.errors = source["errors"];
+	        this.message = source["message"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class PortfolioDTO {
 	    id: string;
 	    name: string;
@@ -734,6 +734,191 @@ export namespace operations {
 	        this.TypeCode = source["TypeCode"];
 	    }
 	}
+
+}
+
+export namespace planning {
+
+	export class Factor {
+	    year: string;
+	    value: string;
+	    source: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Factor(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.year = source["year"];
+	        this.value = source["value"];
+	        this.source = source["source"];
+	    }
+	}
+	export class Parameters {
+	    currencyCode: string;
+	    revision: string;
+	    startYear: string;
+	    years: string;
+	    mode: string;
+	    goal: string;
+	    contribution: string;
+	    returnPercent: string;
+	    inflationPercent: string;
+	    benchmarkID: string;
+	    allowEstimated: boolean;
+	    initialCapital: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Parameters(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.currencyCode = source["currencyCode"];
+	        this.revision = source["revision"];
+	        this.startYear = source["startYear"];
+	        this.years = source["years"];
+	        this.mode = source["mode"];
+	        this.goal = source["goal"];
+	        this.contribution = source["contribution"];
+	        this.returnPercent = source["returnPercent"];
+	        this.inflationPercent = source["inflationPercent"];
+	        this.benchmarkID = source["benchmarkID"];
+	        this.allowEstimated = source["allowEstimated"];
+	        this.initialCapital = source["initialCapital"];
+	    }
+	}
+	export class Point {
+	    date: string;
+	    nominal: string;
+	    real: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Point(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.date = source["date"];
+	        this.nominal = source["nominal"];
+	        this.real = source["real"];
+	    }
+	}
+	export class Row {
+	    year: string;
+	    before: string;
+	    contribution: string;
+	    inflation: string;
+	    source: string;
+	    income: string;
+	    capital: string;
+	    realCapital: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Row(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.year = source["year"];
+	        this.before = source["before"];
+	        this.contribution = source["contribution"];
+	        this.inflation = source["inflation"];
+	        this.source = source["source"];
+	        this.income = source["income"];
+	        this.capital = source["capital"];
+	        this.realCapital = source["realCapital"];
+	    }
+	}
+	export class Scenario {
+	    complete: boolean;
+	    issues: string[];
+	    firstContribution: string;
+	    finalCapital: string;
+	    finalRealCapital: string;
+	    excess: string;
+	    goalReached: boolean;
+	    rows: Row[];
+	    points: Point[];
+	    factors: Factor[];
+
+	    static createFrom(source: any = {}) {
+	        return new Scenario(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.complete = source["complete"];
+	        this.issues = source["issues"];
+	        this.firstContribution = source["firstContribution"];
+	        this.finalCapital = source["finalCapital"];
+	        this.finalRealCapital = source["finalRealCapital"];
+	        this.excess = source["excess"];
+	        this.goalReached = source["goalReached"];
+	        this.rows = this.convertValues(source["rows"], Row);
+	        this.points = this.convertValues(source["points"], Point);
+	        this.factors = this.convertValues(source["factors"], Factor);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Plan {
+	    found: boolean;
+	    parameters: Parameters;
+	    currency: string;
+	    original: Scenario;
+	    current: Scenario;
+
+	    static createFrom(source: any = {}) {
+	        return new Plan(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.found = source["found"];
+	        this.parameters = this.convertValues(source["parameters"], Parameters);
+	        this.currency = source["currency"];
+	        this.original = this.convertValues(source["original"], Scenario);
+	        this.current = this.convertValues(source["current"], Scenario);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+
 
 }
 
@@ -990,6 +1175,24 @@ export namespace valuation {
 		}
 	}
 
+	export class CapitalPoint {
+	    date: string;
+	    value: string;
+	    complete: boolean;
+	    issues: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new CapitalPoint(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.date = source["date"];
+	        this.value = source["value"];
+	        this.complete = source["complete"];
+	        this.issues = source["issues"];
+	    }
+	}
 	export class Group {
 	    code: string;
 	    name: string;
@@ -1237,191 +1440,6 @@ export namespace valuation {
 		}
 	}
 
-
-
-
-}
-
-export namespace planning {
-
-	export class Factor {
-	    year: string;
-	    value: string;
-	    source: string;
-
-	    static createFrom(source: any = {}) {
-	        return new Factor(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.year = source["year"];
-	        this.value = source["value"];
-	        this.source = source["source"];
-	    }
-	}
-	export class Parameters {
-	    currencyCode: string;
-	    revision: string;
-	    startYear: string;
-	    years: string;
-	    mode: string;
-	    goal: string;
-	    contribution: string;
-	    returnPercent: string;
-	    inflationPercent: string;
-	    benchmarkID: string;
-	    allowEstimated: boolean;
-	    initialCapital: string;
-
-	    static createFrom(source: any = {}) {
-	        return new Parameters(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.currencyCode = source["currencyCode"];
-	        this.revision = source["revision"];
-	        this.startYear = source["startYear"];
-	        this.years = source["years"];
-	        this.mode = source["mode"];
-	        this.goal = source["goal"];
-	        this.contribution = source["contribution"];
-	        this.returnPercent = source["returnPercent"];
-	        this.inflationPercent = source["inflationPercent"];
-	        this.benchmarkID = source["benchmarkID"];
-	        this.allowEstimated = source["allowEstimated"];
-	        this.initialCapital = source["initialCapital"];
-	    }
-	}
-	export class Point {
-	    date: string;
-	    nominal: string;
-	    real: string;
-
-	    static createFrom(source: any = {}) {
-	        return new Point(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.date = source["date"];
-	        this.nominal = source["nominal"];
-	        this.real = source["real"];
-	    }
-	}
-	export class Row {
-	    year: string;
-	    before: string;
-	    contribution: string;
-	    inflation: string;
-	    source: string;
-	    income: string;
-	    capital: string;
-	    realCapital: string;
-
-	    static createFrom(source: any = {}) {
-	        return new Row(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.year = source["year"];
-	        this.before = source["before"];
-	        this.contribution = source["contribution"];
-	        this.inflation = source["inflation"];
-	        this.source = source["source"];
-	        this.income = source["income"];
-	        this.capital = source["capital"];
-	        this.realCapital = source["realCapital"];
-	    }
-	}
-	export class Scenario {
-	    complete: boolean;
-	    issues: string[];
-	    firstContribution: string;
-	    finalCapital: string;
-	    finalRealCapital: string;
-	    excess: string;
-	    goalReached: boolean;
-	    rows: Row[];
-	    points: Point[];
-	    factors: Factor[];
-
-	    static createFrom(source: any = {}) {
-	        return new Scenario(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.complete = source["complete"];
-	        this.issues = source["issues"];
-	        this.firstContribution = source["firstContribution"];
-	        this.finalCapital = source["finalCapital"];
-	        this.finalRealCapital = source["finalRealCapital"];
-	        this.excess = source["excess"];
-	        this.goalReached = source["goalReached"];
-	        this.rows = this.convertValues(source["rows"], Row);
-	        this.points = this.convertValues(source["points"], Point);
-	        this.factors = this.convertValues(source["factors"], Factor);
-	    }
-
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class Plan {
-	    found: boolean;
-	    parameters: Parameters;
-	    currency: string;
-	    original: Scenario;
-	    current: Scenario;
-
-	    static createFrom(source: any = {}) {
-	        return new Plan(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.found = source["found"];
-	        this.parameters = this.convertValues(source["parameters"], Parameters);
-	        this.currency = source["currency"];
-	        this.original = this.convertValues(source["original"], Scenario);
-	        this.current = this.convertValues(source["current"], Scenario);
-	    }
-
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 
 
 
