@@ -14,7 +14,7 @@ func NewRepository(db *sql.DB) *Repository { return &Repository{db} }
 var _ benchmarks.Repository = (*Repository)(nil)
 
 func (r *Repository) List(ctx context.Context) ([]benchmarks.Benchmark, error) {
-	rows, e := r.db.QueryContext(ctx, `SELECT CAST(id AS TEXT),name,COALESCE(currency_code,'') FROM benchmarks ORDER BY name_key,id`)
+	rows, e := r.db.QueryContext(ctx, `SELECT CAST(id AS TEXT),name,COALESCE(currency_code,''),sources FROM benchmarks ORDER BY name_key,id`)
 	if e != nil {
 		return nil, e
 	}
@@ -22,7 +22,7 @@ func (r *Repository) List(ctx context.Context) ([]benchmarks.Benchmark, error) {
 	out := []benchmarks.Benchmark{}
 	for rows.Next() {
 		var b benchmarks.Benchmark
-		if e = rows.Scan(&b.ID, &b.Name, &b.CurrencyCode); e != nil {
+		if e = rows.Scan(&b.ID, &b.Name, &b.CurrencyCode, &b.Sources); e != nil {
 			return nil, e
 		}
 		out = append(out, b)
@@ -52,7 +52,7 @@ func (r *Repository) Create(ctx context.Context, b benchmarks.Benchmark) (benchm
 	if exists {
 		return b, &benchmarks.FieldError{Field: "name", Message: "Бенчмарк с таким названием уже существует"}
 	}
-	e = tx.QueryRowContext(ctx, `INSERT INTO benchmarks(name,name_key,currency_code) VALUES(?,?,NULLIF(?,'')) RETURNING CAST(id AS TEXT)`, b.Name, key, b.CurrencyCode).Scan(&b.ID)
+	e = tx.QueryRowContext(ctx, `INSERT INTO benchmarks(name,name_key,currency_code,sources) VALUES(?,?,NULLIF(?,''),?) RETURNING CAST(id AS TEXT)`, b.Name, key, b.CurrencyCode, b.Sources).Scan(&b.ID)
 	if e != nil {
 		return b, e
 	}
@@ -115,4 +115,19 @@ func (r *Repository) Rewrite(ctx context.Context, id string, calculate func([]be
 		}
 	}
 	return tx.Commit()
+}
+
+func (r *Repository) UpdateSources(ctx context.Context, id, sources string) error {
+	res, err := r.db.ExecContext(ctx, `UPDATE benchmarks SET sources=? WHERE id=?`, sources, id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return &benchmarks.FieldError{Field: "benchmarkID", Message: "Выберите бенчмарк из справочника"}
+	}
+	return nil
 }

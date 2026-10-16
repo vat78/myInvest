@@ -79,3 +79,9 @@ func (a *BenchmarksAPI) PreviewBenchmarkPoint(p benchmarks.Point) BenchmarkPrevi
 	out.Errors, out.Message = result(e)
 	return out
 }
+
+func (a *BenchmarksAPI) SaveBenchmarkSources(id, sources string) BenchmarkPointResult {
+	err := a.useService(func(s *benchmarks.Service) error { return s.UpdateSources(context.Background(), id, sources) })
+	fields, message := result(err)
+	return BenchmarkPointResult{fields, message}
+}

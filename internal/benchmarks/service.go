@@ -6,6 +6,7 @@ import (
 )
 
 type Repository interface {
+	UpdateSources(context.Context, string, string) error
 	List(context.Context) ([]Benchmark, error)
 	Create(context.Context, Benchmark) (Benchmark, error)
 	History(context.Context, string) ([]Point, error)
@@ -71,4 +72,15 @@ func (s *Service) Preview(ctx context.Context, p Point) (Point, error) {
 		return Point{}, e
 	}
 	return result[len(result)-1], nil
+}
+
+func (s *Service) UpdateSources(ctx context.Context, id, sources string) error {
+	if !validID(id) {
+		return &FieldError{"benchmarkID", "Выберите бенчмарк"}
+	}
+	sources, err := ValidateSources(sources)
+	if err != nil {
+		return err
+	}
+	return s.repo.UpdateSources(ctx, id, sources)
 }

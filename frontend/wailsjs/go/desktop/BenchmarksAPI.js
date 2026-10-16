@@ -21,3 +21,7 @@ export function PreviewBenchmarkPoint(arg1) {
 export function SaveBenchmarkPoint(arg1) {
   return window['go']['desktop']['BenchmarksAPI']['SaveBenchmarkPoint'](arg1);
 }
+
+export function SaveBenchmarkSources(arg1, arg2) {
+  return window['go']['desktop']['BenchmarksAPI']['SaveBenchmarkSources'](arg1, arg2);
+}

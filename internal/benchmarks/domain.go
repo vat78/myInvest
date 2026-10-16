@@ -4,6 +4,7 @@ package benchmarks
 import (
 	"math/big"
 	"myinvest/internal/currency"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -12,6 +13,7 @@ import (
 )
 
 type Benchmark struct {
+	Sources      string `json:"sources"`
 	ID           string `json:"id"`
 	Name         string `json:"name"`
 	CurrencyCode string `json:"currencyCode"`
@@ -42,6 +44,11 @@ func ValidateBenchmark(b Benchmark) (Benchmark, error) {
 		if err != nil {
 			return b, &FieldError{"currencyCode", "Выберите валюту"}
 		}
+	}
+	var err error
+	b.Sources, err = ValidateSources(b.Sources)
+	if err != nil {
+		return b, err
 	}
 	b.ID = ""
 	return b, nil
@@ -148,4 +155,21 @@ func Recalculate(points []Point) ([]Point, error) {
 		}
 	}
 	return result, nil
+}
+
+// ValidateSources accepts one absolute statistics URL per line.
+func ValidateSources(sources string) (string, error) {
+	lines := []string{}
+	for _, line := range strings.Split(sources, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		u, err := url.Parse(line)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil {
+			return "", &FieldError{"sources", "Введите ссылки http:// или https://, по одной на строку"}
+		}
+		lines = append(lines, line)
+	}
+	return strings.Join(lines, "\n"), nil
 }

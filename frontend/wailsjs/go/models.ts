@@ -1,6 +1,7 @@
 export namespace benchmarks {
 	
 	export class Benchmark {
+	    sources: string;
 	    id: string;
 	    name: string;
 	    currencyCode: string;
@@ -11,6 +12,7 @@ export namespace benchmarks {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sources = source["sources"];
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.currencyCode = source["currencyCode"];

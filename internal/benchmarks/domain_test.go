@@ -42,3 +42,23 @@ func TestInvalidInputs(t *testing.T) {
 		t.Fatal(p, e)
 	}
 }
+
+func TestSources(t *testing.T) {
+	for _, tc := range []struct {
+		input, want string
+		invalid     bool
+	}{
+		{"", "", false},
+		{"  https://example.org/stats?q=1&year=2026 \r\n\n http://example.com/данные ", "https://example.org/stats?q=1&year=2026\nhttp://example.com/данные", false},
+		{"javascript:alert(1)", "", true}, {"/statistics", "", true},
+		{"https://", "", true}, {"https://user:password@example.com", "", true},
+		{"https://example.com\nfile:///tmp/data", "", true},
+	} {
+		t.Run(tc.input, func(t *testing.T) {
+			got, err := ValidateSources(tc.input)
+			if (err != nil) != tc.invalid || got != tc.want {
+				t.Fatalf("got %q, %v", got, err)
+			}
+		})
+	}
+}
