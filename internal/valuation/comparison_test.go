@@ -166,3 +166,128 @@ func TestReturnLateBenchmarkAndMissingFX(t *testing.T) {
 		t.Fatal(out.Series[2])
 	}
 }
+
+func TestReturnIntermediateValuationIssuesRemainUnavailable(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		change func(*ComparisonSnapshot)
+	}{
+		{"quote", func(s *ComparisonSnapshot) {
+			s.Pricing.Quotes = append(s.Pricing.Quotes, quotes.Quote{AssetID: "1", Date: "2024-05-01", CurrencyCode: "RUB", Price: "40"})
+		}},
+		{"snapshot", func(s *ComparisonSnapshot) {
+			s.Portfolios[0].Days = append(s.Portfolios[0].Days,
+				Day{Date: "2024-05-01", Cash: "-20"}, Day{Date: "2024-06-01", Cash: "120"})
+		}},
+		{"quote FX", func(s *ComparisonSnapshot) {
+			s.Pricing.Quotes = []quotes.Quote{{AssetID: "1", Date: "2024-01-02", CurrencyCode: "USD", Price: "100"}}
+			s.Pricing.FX = []ExchangeRate{{Date: "2024-01-02", Base: "USD", Quote: "RUB", Value: "1"},
+				{Date: "2024-05-01", Base: "USD", Quote: "RUB", Value: "0.4"},
+				{Date: "2024-12-31", Base: "USD", Quote: "RUB", Value: "1.1"}}
+		}},
+		{"missing FX", func(s *ComparisonSnapshot) {
+			s.Pricing.Quotes = append(s.Pricing.Quotes, quotes.Quote{AssetID: "1", Date: "2024-05-01", CurrencyCode: "USD", Price: "100"})
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := comparisonFixture()
+			s.Portfolios = []Portfolio{{ID: "1", Currency: "RUB", Days: []Day{
+				{Date: "2024-01-01", Cash: "100"},
+				{Date: "2024-01-02", Cash: "-100", Positions: []Position{{AssetID: "1", Quantity: "2", Numerator: "200", Denominator: "1", TradeDate: "2024-01-02"}}},
+			}}}
+			s.Flows = []ComparisonFlow{{"1", "2024-01-01", "deposit", "100"}}
+			s.Pricing.Quotes = []quotes.Quote{{AssetID: "1", Date: "2024-12-31", CurrencyCode: "RUB", Price: "110"}}
+			tc.change(&s)
+			out, err := BuildReturnComparison(s, "1", "2025-12-31")
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, point := range out.Series[1].Points[1:] {
+				if point.Issue == "" || point.Annual != "" || point.Cumulative != "" {
+					t.Fatal(point)
+				}
+			}
+		})
+	}
+}
+
+func TestReturnEmptySnapshotsBeforeFunding(t *testing.T) {
+	for _, first := range []string{"2023-12-01", "2024-01-01"} {
+		for _, tc := range []struct{ cash, finalCash, annual, cumulative string }{
+			{"100", "110", "10", "32"}, {"99", "109", "9", "30.8"},
+		} {
+			t.Run(first+"/"+tc.cash, func(t *testing.T) {
+				s := comparisonFixture()
+				s.Portfolios = []Portfolio{{ID: "1", Currency: "RUB", Days: []Day{
+					{Date: first, Cash: "0", Positions: []Position{{AssetID: "1", Quantity: "0"}}},
+					{Date: "2025-01-01", Cash: tc.cash}, {Date: "2025-12-31", Cash: tc.finalCash},
+				}}}
+				s.Flows = []ComparisonFlow{{"1", "2025-01-01", "deposit", "100"}}
+				out, err := BuildReturnComparison(s, "1", "2025-12-31")
+				if err != nil {
+					t.Fatal(err)
+				}
+				series := out.Series[1]
+				if series.StartDate != "2025-01-01" {
+					t.Fatal(series)
+				}
+				for _, point := range series.Points[:2] {
+					if point.Annual != "" || point.Cumulative != "" {
+						t.Fatal(point)
+					}
+				}
+				point := series.Points[2]
+				if point.Issue != "" || point.Annual != tc.annual || point.Cumulative != tc.cumulative {
+					t.Fatal(point)
+				}
+			})
+		}
+	}
+}
+
+func TestReturnIntermediatePositiveValuations(t *testing.T) {
+	s := comparisonFixture()
+	s.Portfolios = []Portfolio{{ID: "1", Currency: "RUB", Days: []Day{
+		{Date: "2024-01-01", Cash: "100"},
+		{Date: "2024-01-02", Cash: "-100", Positions: []Position{{AssetID: "1", Quantity: "2", Numerator: "200", Denominator: "1", TradeDate: "2024-01-02"}}},
+	}}}
+	s.Flows = []ComparisonFlow{{"1", "2024-01-01", "deposit", "100"}}
+	s.Pricing.Quotes = []quotes.Quote{
+		{AssetID: "1", Date: "2024-05-01", CurrencyCode: "RUB", Price: "60"},
+		{AssetID: "1", Date: "2024-12-31", CurrencyCode: "RUB", Price: "110"},
+		{AssetID: "1", Date: "2025-01-01", CurrencyCode: "RUB", Price: "40"},
+	}
+	out, err := BuildReturnComparison(s, "1", "2024-12-31")
+	if err != nil {
+		t.Fatal(err)
+	}
+	point := out.Series[1].Points[1]
+	if point.Issue != "" || point.Annual != "20" || point.Cumulative != "20" {
+		t.Fatal(point)
+	}
+}
+
+func TestReturnFirstFundingOnCommonBase(t *testing.T) {
+	s := comparisonFixture()
+	s.Portfolios = []Portfolio{{ID: "1", Currency: "RUB", Days: []Day{
+		{Date: "2023-12-01", Cash: "0"}, {Date: "2023-12-31", Cash: "99"},
+	}}}
+	s.Flows = []ComparisonFlow{{"1", "2023-12-31", "deposit", "100"}}
+	out, err := BuildReturnComparison(s, "1", "2023-12-31")
+	if err != nil {
+		t.Fatal(err)
+	}
+	point := out.Series[1].Points[0]
+	if point.Issue != "" || point.Annual != "-1" || point.Cumulative != "-1" {
+		t.Fatal(point)
+	}
+	s.Portfolios[0].Days = s.Portfolios[0].Days[:1]
+	s.Flows = nil
+	out, err = BuildReturnComparison(s, "1", "2024-12-31")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Series[1].StartDate != "" || len(out.Series[1].Points) != 0 {
+		t.Fatal(out.Series[1])
+	}
+}

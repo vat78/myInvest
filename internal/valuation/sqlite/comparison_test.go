@@ -62,3 +62,41 @@ func TestComparisonSnapshot(t *testing.T) {
 		t.Fatal(p)
 	}
 }
+
+func TestComparisonSplitBeforeFunding(t *testing.T) {
+	ctx := context.Background()
+	store, err := storage.Open(ctx, filepath.Join(t.TempDir(), "comparison.db"), migrations.Files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	_, err = store.DB().Exec(`INSERT INTO portfolios(id,name,name_key,opened_on,currency_code) VALUES(1,'P','p','2024-01-01','RUB');
+ INSERT INTO assets(id,ticker,type_code) VALUES(1,'A','stocks');
+ INSERT INTO benchmarks(id,name,name_key) VALUES(1,'Inflation','inflation');
+ INSERT INTO benchmark_points(benchmark_id,date,mode,input,value) VALUES(1,'2023-12-31','value','100','100');`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := operations.NewService(operationssqlite.NewRepository(store.DB()))
+	for _, in := range []operations.Input{
+		{Kind: "split", Date: "2024-01-01", AssetID: "1", OldUnits: "1", NewUnits: "2"},
+		{Kind: "deposit", Date: "2024-06-01", CurrencyCode: "RUB", Amount: "100", PortfolioAmount: "100"},
+		{Kind: "dividend", Date: "2024-12-31", Amount: "10"},
+	} {
+		if _, err = service.Save(ctx, "1", "", in); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, err := valuation.NewComparisonService(NewRepository(store.DB())).Compare(ctx, "1", "2024-12-31")
+	if err != nil {
+		t.Fatal(err)
+	}
+	series := out.Series[1]
+	if series.StartDate != "2024-06-01" {
+		t.Fatal(series)
+	}
+	point := series.Points[1]
+	if point.Issue != "" || point.Annual != "10" || point.Cumulative != "10" {
+		t.Fatal(point)
+	}
+}

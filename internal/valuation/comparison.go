@@ -210,21 +210,10 @@ func (c returnContext) portfolioReturns(p Portfolio, flows []ComparisonFlow, out
 	if len(p.Days) == 0 {
 		return series, nil
 	}
-	start := p.Days[0].Date
-	if start > out.Dates[len(out.Dates)-1] {
-		return series, nil
-	}
-	if start < out.BaseDate {
-		start = out.BaseDate
-	}
-	series.StartDate = start
-	offset, issue, err := anchor(start)
-	if err != nil {
-		return series, err
-	}
+	end := out.Dates[len(out.Dates)-1]
 	net := map[string]*big.Rat{}
 	for _, f := range flows {
-		if f.PortfolioID != p.ID || f.Date < start || f.Date > out.Dates[len(out.Dates)-1] {
+		if f.PortfolioID != p.ID || f.Date > end {
 			continue
 		}
 		amount, e := decimal(f.Amount)
@@ -241,20 +230,48 @@ func (c returnContext) portfolioReturns(p Portfolio, flows []ComparisonFlow, out
 		}
 		net[f.Date].Add(net[f.Date], amount)
 	}
-	events := map[string]bool{start: true}
+	// Empty snapshots (for example, a split before any holdings) do not form
+	// a portfolio. Keep nonempty unfunded history visible as a diagnostic.
+	start := ""
 	for d := range net {
-		events[d] = true
-	}
-	for _, d := range out.Dates {
-		if d >= start {
-			events[d] = true
+		if start == "" || d < start {
+			start = d
 		}
 	}
-	dates := []string{}
-	for d := range events {
-		dates = append(dates, d)
+	for _, day := range p.Days {
+		if day.Date > end || (start != "" && day.Date >= start) {
+			break
+		}
+		cash, err := decimal(day.Cash)
+		if err != nil {
+			return series, err
+		}
+		nonempty := cash.Sign() != 0
+		for _, pos := range day.Positions {
+			quantity, err := decimal(pos.Quantity)
+			if err != nil {
+				return series, err
+			}
+			nonempty = nonempty || quantity.Sign() != 0
+		}
+		if nonempty {
+			start = day.Date
+			break
+		}
 	}
-	sort.Strings(dates)
+	if start == "" {
+		return series, nil
+	}
+	existing := start < out.BaseDate
+	if existing {
+		start = out.BaseDate
+	}
+	series.StartDate = start
+	offset, issue, err := anchor(start)
+	if err != nil {
+		return series, err
+	}
+	dates := c.returnDates(p, net, out.Dates, start, end)
 	cumulative, yearBase := big.NewRat(1, 1), big.NewRat(1, 1)
 	var previous *big.Rat
 	values := map[string]ReturnPoint{}
@@ -282,7 +299,7 @@ func (c returnContext) portfolioReturns(p Portfolio, flows []ComparisonFlow, out
 					}
 				}
 				if issue == "" {
-					if previous == nil && start == out.BaseDate && p.Days[0].Date < start {
+					if previous == nil && existing {
 						previous = new(big.Rat).Set(v)
 					} else {
 						denominator := previous
@@ -334,4 +351,58 @@ func (c returnContext) portfolioReturns(p Portfolio, flows []ComparisonFlow, out
 		series.Points = append(series.Points, point)
 	}
 	return series, nil
+}
+
+// Values are constant between snapshot, price, split and FX events. Checking
+// each such event catches invalid intermediate valuations without a daily walk.
+func (c returnContext) returnDates(p Portfolio, net map[string]*big.Rat, endpoints []string, start, end string) []string {
+	events := map[string]bool{}
+	add := func(date string) {
+		if date >= start && date <= end {
+			events[date] = true
+		}
+	}
+	add(start)
+	for date := range net {
+		add(date)
+	}
+	for _, date := range endpoints {
+		add(date)
+	}
+	assets := map[string]bool{}
+	for _, day := range p.Days {
+		if day.Date > end {
+			break
+		}
+		add(day.Date)
+		for _, pos := range day.Positions {
+			assets[pos.AssetID] = true
+		}
+	}
+	quoteCurrencies := map[string]bool{}
+	for asset := range assets {
+		for _, q := range c.prices.quotes[asset] {
+			add(q.Date)
+			quoteCurrencies[q.CurrencyCode] = true
+		}
+		for _, split := range c.prices.splits[priceKey(p.ID, asset)] {
+			add(split.date)
+		}
+	}
+	for currency := range quoteCurrencies {
+		if currency != p.Currency {
+			for _, rate := range c.prices.fx[priceKey(currency, p.Currency)] {
+				add(rate.Date)
+			}
+		}
+	}
+	for _, rate := range c.rates[p.Currency] {
+		add(rate.Date)
+	}
+	dates := make([]string, 0, len(events))
+	for date := range events {
+		dates = append(dates, date)
+	}
+	sort.Strings(dates)
+	return dates
 }
