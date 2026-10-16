@@ -8,7 +8,7 @@ function harness(overrides = {}) {
  const text = readFileSync(new URL('./BenchmarkManager.svelte', import.meta.url), 'utf8');
  const {instance} = parse(text);
  const script = text.slice(instance.content.start,instance.content.end).replace(/^\s*import .*;$/gm,'');
- const sandbox = {$state:v=>v,$derived:v=>v,$effect(){},onMount(){},localDate:()=> '2026-10-14',
+ const sandbox = {$props:()=>({}),$state:v=>v,$derived:v=>v,$effect(){},onMount(){},localDate:()=> '2026-10-14',
   ListBenchmarks:async()=>[],ListCurrencies:async()=>['RUB'],BenchmarkHistory:async()=>[],SaveBenchmarkPoint:async()=>({errors:{},message:''}),
   CreateBenchmark:async()=>({benchmark:{id:'1',name:'Inflation',currencyCode:''},errors:{},message:''}),document:{getElementById:()=>({focus(){}})},...overrides};
  vm.createContext(sandbox);

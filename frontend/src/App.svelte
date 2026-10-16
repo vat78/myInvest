@@ -206,7 +206,7 @@
     <QuoteManager revision={quoteRevision} onchanged={() => void refreshOverview()} onrate={openEditor} onaddasset={trigger => void assetManager.openList(trigger)} />
   </div>
   <div class="panel" id="panel-benchmarks" role="tabpanel" aria-labelledby="tab-benchmarks" hidden={tab !== 'benchmarks'} tabindex="0">
-    <BenchmarkManager />
+    <BenchmarkManager revision={analysisRevision} />
   </div>
 </main>
 

@@ -10,12 +10,20 @@ type Repository struct{ db *sql.DB }
 
 func NewRepository(db *sql.DB) *Repository { return &Repository{db} }
 func (r *Repository) Load(ctx context.Context, date string) (valuation.Snapshot, error) {
-	out := valuation.Snapshot{Portfolios: []valuation.Portfolio{}, Rates: []valuation.Rate{}}
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return valuation.Snapshot{}, err
+	}
+	defer tx.Rollback()
+	out, err := loadSnapshot(ctx, tx, date)
 	if err != nil {
 		return out, err
 	}
-	defer tx.Rollback()
+	return out, tx.Commit()
+}
+
+func loadSnapshot(ctx context.Context, tx *sql.Tx, date string) (valuation.Snapshot, error) {
+	out := valuation.Snapshot{Portfolios: []valuation.Portfolio{}, Rates: []valuation.Rate{}}
 	rows, err := tx.QueryContext(ctx, "SELECT id,name,currency_code FROM portfolios ORDER BY name_key,id")
 	if err != nil {
 		return out, err
@@ -84,5 +92,5 @@ func (r *Repository) Load(ctx context.Context, date string) (valuation.Snapshot,
 	if err != nil {
 		return out, err
 	}
-	return out, tx.Commit()
+	return out, nil
 }

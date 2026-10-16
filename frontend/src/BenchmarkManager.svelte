@@ -1,5 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import ReturnComparison from './ReturnComparison.svelte';
+  let { revision = 0 }: { revision?: number } = $props();
+  let historyRevision = $state(0);
   import { ListBenchmarks, CreateBenchmark, BenchmarkHistory, SaveBenchmarkPoint, PreviewBenchmarkPoint } from '../wailsjs/go/desktop/BenchmarksAPI';
   import { ListCurrencies } from '../wailsjs/go/desktop/API';
   import { localDate } from './calendar';
@@ -71,11 +74,12 @@
     event.preventDefault(); if (busy) return; busy = true; errors = {}; message = ''; feedback = '';
     try { const result = await SaveBenchmarkPoint({benchmarkID, date, mode, input, value: '', growth: ''}); if (!alive) return;
       errors = result.errors; message = result.message;
-      if (!message && !Object.keys(errors).length) { feedback = 'Исторические данные сохранены'; await refreshHistory(); }
+      if (!message && !Object.keys(errors).length) { feedback = 'Исторические данные сохранены'; historyRevision++; await refreshHistory(); }
     } catch { if (alive) message = 'Не удалось сохранить данные. Повторите попытку.'; }
     finally { if (alive) busy = false; }
   }
 </script>
+<ReturnComparison {benchmarks} revision={revision + historyRevision} />
 <section aria-labelledby="benchmarks-title">
   <h2 id="benchmarks-title">Бенчмарки</h2>
   <p class="hint">Инфляция, депозиты, недвижимость и другие ориентиры. Прирост применяется к ближайшей предыдущей дате, без пересчёта в годовую ставку. Для индекса можно начать со стоимости 100.</p>
